@@ -3,21 +3,22 @@ import { DatabaseManager } from '@/lib/database-manager'
 
 // Initialize the DatabaseManager with connection details
 const dbManager = new DatabaseManager(
-  {
-    host: process.env.POSTGRES_HOST,
-    database: process.env.POSTGRES_DB,
-    user: process.env.POSTGRES_USER,
-    password: process.env.POSTGRES_PASSWORD,
-  },
-  {
-    uri: process.env.NEO4J_URI,
-    auth: [process.env.NEO4J_USER, process.env.NEO4J_PASSWORD],
-  },
-  {
-    host: process.env.REDIS_HOST,
-    port: parseInt(process.env.REDIS_PORT || '6379'),
-    db: parseInt(process.env.REDIS_DB || '0'),
-  }
+    {
+      host: process.env.POSTGRES_HOST || '',
+      port: parseInt(process.env.POSTGRES_PORT || '5432'),
+      database: process.env.POSTGRES_DB || '',
+      user: process.env.POSTGRES_USER || '',
+      password: process.env.POSTGRES_PASSWORD || '',
+    },
+    { 
+      uri: process.env.NEO4J_URI || '', 
+      username: process.env.NEO4J_USER || '', 
+      password: process.env.NEO4J_PASSWORD || '' 
+    },
+    // {
+    //   url: `redis://${process.env.REDIS_HOST || ''}:${process.env.REDIS_PORT || '6379'}`,
+    //   db: parseInt(process.env.REDIS_DB || '0')
+    // }
 )
 
 export async function POST(request: Request) {

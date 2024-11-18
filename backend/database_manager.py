@@ -14,50 +14,59 @@ class DatabaseManager:
         self.redis_conn = Redis(**redis_conn)
         
     def create_regulation(self, regulation_data: Dict) -> str:
-        """Creates a new regulation entry in both Postgres and Neo4j"""
+        """
+        Creates a new regulation entry in both PostgreSQL and Neo4j.
+        """
         regulation_id = str(uuid.uuid4())
-        
+    
         try:
+            # First, store structured data in PostgreSQL
             with self.pg_conn.cursor() as cursor:
                 cursor.execute("""
-                    INSERT INTO regulations (Regulation_ID, Nuremberg_Number, Name, OriginalReference, SAMTag, Content, Level, Domain, EffectiveDate)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (regulation_id, regulation_data['nuremberg_number'], regulation_data['name'], regulation_data['original_reference'], regulation_data['sam_tag'], regulation_data['content'], regulation_data['level'], regulation_data['domain'], regulation_data['effective_date']))
+                INSERT INTO Regulations (
+                    RegulationID, NurembergNumber, Name, 
+                    OriginalReference, SAMTag, Content,
+                    Level, Domain, EffectiveDate
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    regulation_id,
+                    regulation_data['nuremberg_number'],
+                    regulation_data['name'],
+                    regulation_data['original_reference'],
+                    regulation_data['sam_tag'],
+                    regulation_data['content'],
+                    regulation_data['level'],
+                    regulation_data['domain'],
+                    regulation_data['effective_date']
+                ))
             self.pg_conn.commit()
-            
+
+            # Then, create node in Neo4j for relationship management
             with self.neo4j_driver.session() as session:
                 session.run("""
-                    CREATE (r:Regulation {RegulationID: $id, NurembergNumber: $nuremberg_number, Name: $name, OriginalReference: $original_reference, SAMTag: $sam_tag, Content: $content, Level: $level, Domain: $domain, EffectiveDate: $effective_date})
-                """, id=regulation_id, **regulation_data)
+                    CREATE (r:Regulation {
+                    RegulationID: $reg_id,
+                    NurembergNumber: $nuremberg,
+                    Name: $name,
+                    Level: $level
+                })
+                """, {
+                    'reg_id': regulation_id,
+                    'nuremberg': regulation_data['nuremberg_number'],
+                    'name': regulation_data['name'],
+                    'level': regulation_data['level']
+                })
 
-    def handle_request(self, request):
-        method = request['method']
-        params = request['params']
+            # Cache the regulation data
+            cache_key = f"regulation:{regulation_id}"
+            self.redis_conn.setex(
+                cache_key,
+                3600,  # Cache for 1 hour
+                str(regulation_data)
+            )
 
-        if method == 'create_crosswalk':
-            self.create_crosswalk(params['source_id'], params['target_id'], params['crosswalk_type'])
-            return json.dumps({'success': True})
-        elif method == 'get_regulation_with_crosswalks':
-            regulation = self.get_regulation_with_crosswalks(params['regulation_id'])
-            return json.dumps(regulation)
-        else:
-            return json.dumps({'error': 'Unknown method'})
+            return regulation_id
 
-if __name__ == '__main__':
-    # Read connection details from stdin
-    connection_details = json.loads(sys.stdin.readline())
-    
-    db_manager = DatabaseManager(
-        connection_details['postgres_conn'],
-        connection_details['neo4j_conn'],
-        connection_details['redis_conn']
-    )
-
-    # Handle incoming requests
-    for line in sys.stdin:
-        request = json.loads(line)
-        result = db_manager.handle_request(request)
-        sys.stdout.write(result + '\n')
-        sys.stdout.flush()
-
-    db_manager.close()
+        except Exception as e:
+            self.pg_conn.rollback()
+            raise Exception(f"Failed to create regulation: {str(e)}")
