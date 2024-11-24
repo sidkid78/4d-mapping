@@ -8,6 +8,23 @@ import uuid
 from datetime import datetime
 
 class DatabaseManager:
+    """
+    A class to manage database operations across PostgreSQL, Neo4j, and Redis.
+
+    This class provides an interface for performing CRUD operations on regulations
+    while maintaining consistency across multiple databases.
+
+    Attributes:
+        pg_conn: PostgreSQL connection object
+        neo4j_driver: Neo4j driver instance
+        redis_conn: Redis connection object
+
+    Args:
+        postgres_conn (dict): PostgreSQL connection parameters
+        neo4j_conn (dict): Neo4j connection parameters 
+        redis_conn (dict): Redis connection parameters
+    """
+
     def __init__(self, postgres_conn, neo4j_conn, redis_conn):
         self.pg_conn = psycopg2.connect(**postgres_conn)
         self.neo4j_driver = GraphDatabase.driver(**neo4j_conn)
@@ -15,7 +32,27 @@ class DatabaseManager:
         
     def create_regulation(self, regulation_data: Dict) -> str:
         """
-        Creates a new regulation entry in both PostgreSQL and Neo4j.
+        Creates a new regulation entry across PostgreSQL, Neo4j and Redis.
+
+        This method creates a new regulation record in PostgreSQL for structured data storage,
+        a corresponding node in Neo4j for relationship management, and caches the data in Redis.
+
+        Args:
+            regulation_data (Dict): Dictionary containing regulation details with keys:
+                - nuremberg_number (str): The Nuremberg code number
+                - name (str): Regulation name
+                - original_reference (str): Original document reference
+                - sam_tag (str): SAM classification tag
+                - content (str): Full regulation content
+                - level (str): Regulation level
+                - domain (str): Regulatory domain
+                - effective_date (datetime): When regulation takes effect
+
+        Returns:
+            str: The UUID of the newly created regulation
+
+        Raises:
+            Exception: If creation fails in any database, with rollback in PostgreSQL
         """
         regulation_id = str(uuid.uuid4())
     

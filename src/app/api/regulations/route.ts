@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server'
 import { DatabaseManager } from '@/lib/database-manager'
 
 // Ensure all environment variables are defined
-if (!process.env.POSTGRES_HOST || !process.env.POSTGRES_DATABASE || 
+if (!process.env.POSTGRES_HOST || !process.env.POSTGRES_DB || 
     !process.env.POSTGRES_USER || !process.env.POSTGRES_PASSWORD ||
-    !process.env.NEO4J_URI || !process.env.NEO4J_USERNAME || 
+    !process.env.NEO4J_URI || !process.env.NEO4J_USER || 
     !process.env.NEO4J_PASSWORD) {
   throw new Error('Missing required environment variables')
 }
@@ -13,13 +13,13 @@ const dbManager = new DatabaseManager(
   {          
     host: process.env.POSTGRES_HOST,
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
-    database: process.env.POSTGRES_DATABASE,
+    database: process.env.POSTGRES_DB,
     user: process.env.POSTGRES_USER,
     password: process.env.POSTGRES_PASSWORD
   },
   {
     uri: process.env.NEO4J_URI,
-    username: process.env.NEO4J_USERNAME,
+    username: process.env.NEO4J_USER,
     password: process.env.NEO4J_PASSWORD
   },
   { timeout: 5000, retries: 3 }

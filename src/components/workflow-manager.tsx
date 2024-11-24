@@ -1,3 +1,26 @@
+/**
+ * WorkflowManager Component
+ * 
+ * A React component that provides a user interface for managing and monitoring various system workflows.
+ * 
+ * Features:
+ * - Interactive workflow selection buttons with visual feedback
+ * - Real-time workflow status monitoring
+ * - Detailed workflow information display
+ * 
+ * @component
+ * @example
+ * ```tsx
+ * <WorkflowManager />
+ * ```
+ * 
+ * @remarks
+ * The component uses client-side state management to track active workflows and their results.
+ * Each workflow button triggers a simulated process with a 2-second delay.
+ * 
+ * @returns A responsive grid layout containing workflow controls and status displays
+ */
+
 'use client'
 
 import { useState } from 'react'

@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import animate from "tailwindcss-animate";
 
 export default {
     darkMode: ["class"],
@@ -10,49 +11,70 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#FFFFFF',
-        foreground: '#003366',
+        // Primary Colors
+        background: '#FFFFFF', // Clean background
+        foreground: '#003366', // Navy blue for text
+        
+        // Card styling
         card: {
+          DEFAULT: '#FFFFFF', // White background for cards
+          foreground: '#003366' // Navy text for cards
+        },
+        
+        // Popover styling
+        popover: {
           DEFAULT: '#FFFFFF',
           foreground: '#003366'
         },
-        popover: {
-          DEFAULT: '#FFFFFF', 
-          foreground: '#003366'
-        },
+        
+        // Primary elements (headers, nav, main buttons)
         primary: {
-          DEFAULT: '#003366',
+          DEFAULT: '#003366', // Navy blue
           foreground: '#FFFFFF'
         },
+        
+        // Secondary elements (CTAs, interactive elements)
         secondary: {
-          DEFAULT: '#1E90FF',
+          DEFAULT: '#1E90FF', // Light blue
           foreground: '#FFFFFF'
         },
+        
+        // Muted elements (subtle backgrounds, secondary text)
         muted: {
-          DEFAULT: '#A9A9A9',
+          DEFAULT: '#A9A9A9', // Gray
           foreground: '#FFFFFF'
         },
+        
+        // Accent elements (highlights, interactive states)
         accent: {
-          DEFAULT: '#1E90FF',
+          DEFAULT: '#1E90FF', // Light blue
           foreground: '#FFFFFF'
         },
+        
+        // Destructive actions (errors, critical alerts)
         destructive: {
-          DEFAULT: '#FF4500',
+          DEFAULT: '#FF4500', // Red
           foreground: '#FFFFFF'
         },
+        
+        // Success indicators
         success: {
-          DEFAULT: '#32CD32',
+          DEFAULT: '#32CD32', // Green
           foreground: '#FFFFFF'
         },
-        border: '#A9A9A9',
-        input: '#A9A9A9',
-        ring: '#1E90FF',
+        
+        // UI Elements
+        border: '#A9A9A9', // Gray for borders and dividers
+        input: '#A9A9A9', // Gray for form elements
+        ring: '#1E90FF', // Light blue for focus states
+        
+        // Chart colors
         chart: {
-          '1': '#003366',
-          '2': '#1E90FF', 
-          '3': '#32CD32',
-          '4': '#FF4500',
-          '5': '#A9A9A9'
+          '1': '#003366', // Navy blue
+          '2': '#1E90FF', // Light blue
+          '3': '#32CD32', // Green
+          '4': '#FF4500', // Red
+          '5': '#A9A9A9'  // Gray
         }
       },
       borderRadius: {
@@ -62,5 +84,5 @@ export default {
       }
     }
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [animate],
 } satisfies Config;

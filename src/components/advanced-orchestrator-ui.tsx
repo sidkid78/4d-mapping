@@ -6,7 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { AlertCircle, ArrowUpCircle, BarChart2, CheckCircle, FileText, Shield, PenToolIcon as Tool, BookOpen } from 'lucide-react'
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import RegulationManager from './regulation-manager'
+import FederalRegisterSearch from './federal-register-search'
 
 type WorkflowResult = {
   status: string;
@@ -14,11 +17,12 @@ type WorkflowResult = {
   timestamp: string;
 } | null;
 
-export default function AdvancedOrchestratorUI() {
+export function AdvancedOrchestratorUI() {
   const [activeTab, setActiveTab] = useState('workflows')
   const [activeWorkflow, setActiveWorkflow] = useState<string>('')
   const [workflowResult, setWorkflowResult] = useState<WorkflowResult>(null)
-  const [showDocumentation, setShowDocumentation] = useState(false)
+  const [query, setQuery] = useState('')
+  const [queryResult, setQueryResult] = useState<string | null>(null)
 
   const triggerWorkflow = async (workflow: string) => {
     setActiveWorkflow(workflow)
@@ -31,146 +35,100 @@ export default function AdvancedOrchestratorUI() {
     }, 2000)
   }
 
+  const handleQuerySubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const response = await fetch('/api/rag', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query, userContext: { expertise_level: 3 } }),
+      })
+      const data = await response.json()
+      setQueryResult(data.response)
+    } catch (error) {
+      console.error('Error processing query:', error)
+      setQueryResult('An error occurred while processing your query.')
+    }
+  }
+
   return (
     <div className="container py-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-4xl font-bold text-[#1E90FF]">Advanced Orchestrator Dashboard</h1>
-        <Button
-          variant="ghost"
-          onClick={() => setShowDocumentation(!showDocumentation)}
-          className="flex items-center gap-2 text-[#1E90FF]"
-        >
-          <BookOpen className="h-5 w-5" />
-          Documentation
-        </Button>
-      </div>
-
-      {showDocumentation && (
-        <Card className="mb-8 border-[#1E90FF]/10">
-          <CardHeader>
-            <CardTitle className="text-[#1E90FF]">Documentation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[200px] w-full rounded-md">
-              <div className="space-y-4">
-                <section>
-                  <h3 className="font-semibold mb-2">Getting Started</h3>
-                  <p>Welcome to the Advanced Orchestrator Dashboard. This tool helps you manage workflows and regulations efficiently.</p>
-                </section>
-                <section>
-                  <h3 className="font-semibold mb-2">Workflows</h3>
-                  <p>Select from various workflow types including regulatory updates, system upgrades, and more. Monitor their progress in real-time.</p>
-                </section>
-                <section>
-                  <h3 className="font-semibold mb-2">Regulation Management</h3>
-                  <p>Use the Regulation Manager tab to handle compliance requirements and maintain regulatory documentation.</p>
-                </section>
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      )}
-
+      <h1 className="text-4xl font-bold text-[#1E90FF] mb-8 text-center">Advanced Orchestrator Dashboard</h1>
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="workflows">Workflows</TabsTrigger>
-          <TabsTrigger value="regulations">Regulation Manager</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="workflows">
+            <Tool className="w-4 h-4 mr-2" />
+            Workflows
+          </TabsTrigger>
+          <TabsTrigger value="regulations">
+            <Shield className="w-4 h-4 mr-2" />
+            Regulation Manager
+          </TabsTrigger>
+          <TabsTrigger value="federal-register">
+            <FileText className="w-4 h-4 mr-2" />
+            Federal Register
+          </TabsTrigger>
+          <TabsTrigger value="rag">
+            <BookOpen className="w-4 h-4 mr-2" />
+            RAG Query
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="workflows" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-2 gap-4">
             <Card className="border-[#1E90FF]/10">
               <CardHeader>
-                <CardTitle className="text-[#1E90FF]">Workflow Actions</CardTitle>
+                <CardTitle className="flex items-center">
+                  <BarChart2 className="w-5 h-5 mr-2 text-[#1E90FF]" />
+                  Analytics Workflow
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {[
-                  { id: 'regulatoryUpdate', icon: FileText, label: 'Regulatory Update' },
-                  { id: 'systemUpgrade', icon: ArrowUpCircle, label: 'System Upgrade' },
-                  { id: 'incidentResponse', icon: AlertCircle, label: 'Incident Response' },
-                  { id: 'dataMigration', icon: Shield, label: 'Data Migration' },
-                  { id: 'maintenanceAndReporting', icon: Tool, label: 'Maintenance & Reporting' },
-                  { id: 'aiAnalysisAndVisualization', icon: BarChart2, label: 'AI Analysis & Visualization' },
-                  { id: 'complianceAndBackup', icon: CheckCircle, label: 'Compliance & Backup' },
-                ].map((workflow) => (
-                  <Button
-                    key={workflow.id}
-                    onClick={() => triggerWorkflow(workflow.id)}
-                    className="w-full bg-white hover:bg-[#1E90FF] hover:text-white transition-colors"
-                    style={{ borderColor: '#1E90FF', color: activeWorkflow === workflow.id ? '#FFA500' : '#1E90FF' }}
-                    disabled={activeWorkflow === workflow.id}
-                    variant="outline"
-                  >
-                    <workflow.icon className="mr-2 h-4 w-4" />
-                    {workflow.label}
-                  </Button>
-                ))}
+              <CardContent>
+                <Button onClick={() => triggerWorkflow('analytics')} className="w-full">
+                  {activeWorkflow === 'analytics' ? (
+                    <ArrowUpCircle className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                  )}
+                  Run Analytics
+                </Button>
               </CardContent>
             </Card>
             <Card className="border-[#1E90FF]/10">
               <CardHeader>
-                <CardTitle className="text-[#1E90FF]">Workflow Results</CardTitle>
+                <CardTitle className="flex items-center">
+                  <AlertCircle className="w-5 h-5 mr-2 text-[#1E90FF]" />
+                  Validation Workflow
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="min-h-[200px] flex items-center justify-center">
-                  {activeWorkflow ? (
-                    workflowResult ? (
-                      <div className="space-y-2">
-                        <p><strong className="text-[#1E90FF]">Status:</strong> {workflowResult.status}</p>
-                        <p><strong className="text-[#1E90FF]">Details:</strong> {workflowResult.details}</p>
-                        <p><strong className="text-[#1E90FF]">Timestamp:</strong> {workflowResult.timestamp}</p>
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground">Processing {activeWorkflow}...</p>
-                    )
+                <Button onClick={() => triggerWorkflow('validation')} className="w-full">
+                  {activeWorkflow === 'validation' ? (
+                    <ArrowUpCircle className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
-                    <p className="text-muted-foreground">No active workflow</p>
+                    <CheckCircle className="w-4 h-4 mr-2" />
                   )}
-                </div>
+                  Run Validation
+                </Button>
               </CardContent>
             </Card>
           </div>
-          <Card className="border-[#1E90FF]/10">
-            <CardHeader>
-              <CardTitle className="text-[#1E90FF]">Workflow Details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="regulatoryUpdate">
-                <TabsList className="w-full justify-start overflow-x-auto">
-                  {[
-                    'Regulatory Update',
-                    'System Upgrade',
-                    'Incident Response',
-                    'Data Migration',
-                    'Maintenance & Reporting',
-                    'AI Analysis & Visualization',
-                    'Compliance & Backup'
-                  ].map((tab) => (
-                    <TabsTrigger
-                      key={tab.toLowerCase().replace(/ /g, '')}
-                      value={tab.toLowerCase().replace(/ /g, '')}
-                      className="data-[state=active]:text-[#FFA500]"
-                    >
-                      {tab}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-                <TabsContent value="regulatoryupdate">
-                  <ScrollArea className="h-[200px] w-full rounded-md border p-4">
-                    <h3 className="font-semibold">Regulatory Update Workflow</h3>
-                    <ul className="list-disc pl-5">
-                      <li>AI Analysis of Update</li>
-                      <li>Update Knowledge Base</li>
-                      <li>Generate Impact Report</li>
-                      <li>Create Visualizations</li>
-                      <li>Trigger Compliance Checks</li>
-                      <li>Schedule Necessary Maintenance</li>
-                    </ul>
-                  </ScrollArea>
-                </TabsContent>
-                {/* Add similar TabsContent for other workflows */}
-              </Tabs>
-            </CardContent>
-          </Card>
+          {workflowResult && (
+            <Card className="mt-4 border-[#1E90FF]/10">
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <CheckCircle className="w-5 h-5 mr-2 text-green-500" />
+                  Workflow Result
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p><span className="font-semibold">Status:</span> {workflowResult.status}</p>
+                <p><span className="font-semibold">Details:</span> {workflowResult.details}</p>
+                <p><span className="font-semibold">Time:</span> {new Date(workflowResult.timestamp).toLocaleString()}</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
         <TabsContent value="regulations">
           <Card className="border-[#1E90FF]/10">
@@ -179,6 +137,45 @@ export default function AdvancedOrchestratorUI() {
             </CardHeader>
             <CardContent>
               <RegulationManager />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="federal-register">
+          <Card className="border-[#1E90FF]/10">
+            <CardHeader>
+              <CardTitle className="text-[#1E90FF]">Federal Register Search</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <FederalRegisterSearch />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="rag">
+          <Card className="border-[#1E90FF]/10">
+            <CardHeader>
+              <CardTitle className="text-[#1E90FF]">RAG Query</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleQuerySubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="query">Enter your query:</Label>
+                  <Input
+                    id="query"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Type your question here..."
+                  />
+                </div>
+                <Button type="submit">Submit Query</Button>
+              </form>
+              {queryResult && (
+                <div className="mt-4">
+                  <h3 className="font-semibold text-lg mb-2">Response:</h3>
+                  <ScrollArea className="h-[200px] w-full rounded-md border p-4">
+                    <p>{queryResult}</p>
+                  </ScrollArea>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
