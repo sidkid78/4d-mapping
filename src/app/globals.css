@@ -9,11 +9,11 @@ body {
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 210 100% 20%;
+    --foreground: 210 70% 20%;
     --card: 0 0% 100%;
-    --card-foreground: 210 100% 20%;
+    --card-foreground: 210 70% 20%;
     --popover: 0 0% 100%;
-    --popover-foreground: 210 100% 20%;
+    --popover-foreground: 210 70% 20%;
     --primary: 210 100% 20%;
     --primary-foreground: 0 0% 100%;
     --secondary: 210 100% 50%;
@@ -33,7 +33,16 @@ body {
     --chart-4: 16 100% 50%;
     --chart-5: 0 0% 66%;
     --radius: 0.5rem;
+
+    /* New brand colors */
+    --navy-blue: 210 100% 20%; /* #003366 */
+    --light-blue: 210 100% 50%; /* #1E90FF */
+    --white: 0 0% 100%; /* #FFFFFF */
+    --gray: 0 0% 66%; /* #A9A9A9 */
+    --success: 120 61% 50%; /* #32CD32 */
+    --error: 16 100% 50%; /* #FF4500 */
   }
+
   .dark {
     --background: 210 100% 20%;
     --foreground: 0 0% 100%;
@@ -59,6 +68,14 @@ body {
     --chart-3: 120 61% 50%;
     --chart-4: 16 100% 50%;
     --chart-5: 0 0% 66%;
+
+    /* Dark mode brand colors */
+    --navy-blue: 210 100% 20%;
+    --light-blue: 210 100% 50%;
+    --white: 0 0% 100%;
+    --gray: 0 0% 66%;
+    --success: 120 61% 50%;
+    --error: 16 100% 50%;
   }
 }
 

@@ -6,6 +6,8 @@ from neo4j import GraphDatabase
 from redis import Redis
 import uuid
 from datetime import datetime
+from openai import AzureOpenAI
+import os
 
 class DatabaseManager:
     """
@@ -29,6 +31,21 @@ class DatabaseManager:
         self.pg_conn = psycopg2.connect(**postgres_conn)
         self.neo4j_driver = GraphDatabase.driver(**neo4j_conn)
         self.redis_conn = Redis(**redis_conn)
+
+        self.api_key = os.getenv("AZURE_OPENAI_API_KEY")
+        self.azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+
+        if not self.api_key or not self.azure_endpoint:
+            raise ValueError("Azure OpenAI credentials not found in environment variables")
+        
+        try: 
+            self.ai_client = AzureOpenAI(
+                api_key=self.api_key,
+                api_version="2024-10-01-preview",
+                azure_endpoint=self.azure_endpoint
+            )
+        except Exception as e:
+            raise ValueError(f"Failed to initialize Azure OpenAI client: {str(e)}")
         
     def create_regulation(self, regulation_data: Dict) -> str:
         """

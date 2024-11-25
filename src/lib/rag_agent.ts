@@ -1,6 +1,7 @@
 import { SearchClient, AzureKeyCredential } from "@azure/search-documents";
-import { Driver } from "neo4j-driver";
 import neo4j from "neo4j-driver";
+import { Driver } from "neo4j-driver";
+import AzureOpenAI from "@azure/openai";
 
 interface RAGConfig {
   search_endpoint?: string;
@@ -30,9 +31,18 @@ interface RAGResult {
   }[];
 }
 
+interface SearchDocument {
+  id: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  score: number;
+}
+
 export class RAGAgent {
-  private searchClient: SearchClient;
+  private searchClient: SearchClient<SearchDocument>;
   private graphDb: Driver;
+  private openAIClient: AzureOpenAI;
+  private deploymentName: string;
 
   constructor(config: RAGConfig) {
     if (!config.search_endpoint || !config.search_key) {
@@ -41,6 +51,10 @@ export class RAGAgent {
 
     if (!config.neo4j_uri || !config.neo4j_user || !config.neo4j_password) {
       throw new Error("Missing required Neo4j configuration");
+    }
+
+    if (!config.azure_openai_endpoint || !config.azure_openai_deployment_name) {
+      throw new Error("Missing required Azure OpenAI configuration");
     }
 
     this.searchClient = new SearchClient(
@@ -53,6 +67,13 @@ export class RAGAgent {
       config.neo4j_uri,
       neo4j.auth.basic(config.neo4j_user, config.neo4j_password)
     );
+
+    this.openAIClient = new AzureOpenAI(
+      config.azure_openai_endpoint,
+      new AzureKeyCredential(config.azure_openai_secret_name || "")
+    );
+
+    this.deploymentName = config.azure_openai_deployment_name;
   }
 
   async process_query(query: string, userContext: UserContext): Promise<{
@@ -68,7 +89,7 @@ export class RAGAgent {
   }> {
     try {
       const subQueries = await this.decompose_query(query);
-      const documents = await this.retrieve_documents(subQueries, userContext);
+      const documents = await this.retrieve_documents(subQueries);
       const rankedDocs = this.rank_documents(documents, userContext);
       const context = await this.synthesize_context(rankedDocs);
       const prompt = this.construct_prompt(query, context, userContext);
@@ -79,7 +100,6 @@ export class RAGAgent {
         retrieved_docs: rankedDocs
       };
 
-      // Process with Azure OpenAI
       const response = await this.process_rag_result(ragResult);
 
       return {
@@ -96,8 +116,21 @@ export class RAGAgent {
   }
 
   private async decompose_query(query: string): Promise<string[]> {
-    // TODO: Implement query decomposition logic
-    return [query];
+    const decompositionPrompt = `
+      Break down this complex query into simpler sub-queries. Return only the sub-queries, one per line:
+      Query: ${query}
+    `;
+
+    const response = await this.openAIClient.getChatCompletions(
+      this.deploymentName,
+      [{
+        role: "user",
+        content: decompositionPrompt
+      }]
+    );
+
+    const subQueries = response.choices[0]?.message?.content?.split('\n').filter(q => q.trim()) || [query];
+    return subQueries.length > 0 ? subQueries : [query];
   }
 
   private async retrieve_documents(subQueries: string[]): Promise<SearchDocument[]> {
@@ -113,13 +146,12 @@ export class RAGAgent {
     return documents;
   }
 
-  private rank_documents(documents: any[], userContext: UserContext): any[] {
-    // TODO: Implement document ranking based on user context and relevance
-    return documents.sort((a, b) => b.score - a.score);
+  private rank_documents(documents: SearchDocument[], userContext: UserContext): SearchDocument[] {
+    // Use userContext for ranking if needed
+    return documents.sort((a, b) => (b.score || 0) - (a.score || 0));
   }
 
-  private async synthesize_context(rankedDocs: any[]): Promise<string> {
-    // TODO: Implement context synthesis from ranked documents
+  private async synthesize_context(rankedDocs: SearchDocument[]): Promise<string> {
     return rankedDocs.map(doc => doc.content).join("\n");
   }
 
@@ -134,7 +166,18 @@ ${context}
   }
 
   private async process_rag_result(ragResult: RAGResult): Promise<string> {
-    // TODO: Implement Azure OpenAI integration
-    return "Response placeholder - Azure OpenAI integration pending";
+    const response = await this.openAIClient.getChatCompletions(
+      this.deploymentName,
+      [{
+        role: "system",
+        content: "You are a helpful assistant that provides accurate answers based on the given context."
+      },
+      {
+        role: "user",
+        content: ragResult.prompt
+      }]
+    );
+
+    return response.choices[0]?.message?.content || "Unable to generate response";
   }
 }

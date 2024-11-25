@@ -1,34 +1,19 @@
 import os
-from typing import Dict, List
-import openai
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
-from tenacity import retry, wait_random_exponential, stop_after_attempt
+from openai import AzureOpenAI
+from typing import Dict
 
 class AzureOpenAIIntegration:
     def __init__(self, config: Dict):
-        self.config = config
-        self.azure_endpoint = config["azure_openai_endpoint"]
-        self.deployment_name = config["azure_openai_deployment_name"]
-        self.api_version = config["azure_openai_api_version"]
-        
-        # Fetch API key from Azure Key Vault
-        key_vault_url = config["key_vault_url"]
-        secret_name = config["azure_openai_secret_name"]
-        credential = DefaultAzureCredential()
-        secret_client = SecretClient(vault_url=key_vault_url, credential=credential)
-        self.api_key = secret_client.get_secret(secret_name).value
+        self.client = AzureOpenAI(
+            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            api_version="2024-08-01-preview", 
+            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+        )
 
-        openai.api_type = "azure"
-        openai.api_base = self.azure_endpoint
-        openai.api_version = self.api_version
-        openai.api_key = self.api_key
-
-    @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(6))
     async def generate_response(self, prompt: str, max_tokens: int = 1000) -> str:
         try:
-            response = openai.Completion.create(
-                engine=self.deployment_name,
+            response = self.client.completions.create(
+                model=self.deployment_name,
                 prompt=prompt,
                 max_tokens=max_tokens,
                 n=1,

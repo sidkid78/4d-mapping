@@ -1,19 +1,32 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, Request, Response
+import httpx
+import os
 
 app = FastAPI()
 
-class Item(BaseModel):
-    name: str
-    description: str = None
+FASTAPI_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
 
-@app.post("/items/")
-async def create_item(item: Item):
-    return {"item": item, "message": "Item created successfully"}
+@app.api_route("/items/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_request(path: str, request: Request):
+    url = f"{FASTAPI_URL}/items/{path}"
+    method = request.method
+    headers = {"Content-Type": "application/json"}
 
-@app.get("/items/{item_id}")
-async def read_item(item_id: int):
-    return {"item_id": item_id, "message": "Item details retrieved"}
+    body = None
+    if method != "GET":
+        body = await request.body()
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.request(
+                method=method,
+                url=url,
+                headers=headers,
+                content=body,
+            )
+            return Response(content=response.content, status_code=response.status_code, media_type="application/json")
+        except httpx.RequestError:
+            return Response(content='{"error": "Error connecting to the backend server"}', status_code=500, media_type="application/json")
 
 if __name__ == "__main__":
     import uvicorn

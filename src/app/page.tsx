@@ -1,86 +1,103 @@
-/**
- * AdvancedOrchestratorUI Component
- * 
- * A React component that provides a tabbed interface for managing regulatory workflows,
- * regulation data, and Federal Register searches.
- * 
- * Features:
- * - Workflow management tab for orchestrating system processes
- * - Regulation management tab for handling regulatory data
- * - Federal Register search tab for accessing government publications
- * - RAG query interface for AI-assisted regulatory search
- * 
- * @component
- * @example
- * ```tsx
- * <AdvancedOrchestratorUI />
- * ```
- */
-
+import { Metadata } from 'next'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import RegulationManager from '@/components/regulation-manager'
 import FederalRegisterSearch from '@/components/federal-register-search'
 import WorkflowManager from '@/components/workflow-manager'
 import { RAGQueryInterface } from '@/components/rag-query-interface'
+import DatabaseManagement from '@/components/database-management'
+import ClauseManager from '@/components/clause-manager'
+import ProcurementDashboard from '@/components/procurement-dashboard'
 
-interface TabConfig {
-  value: string
-  title: string
-  component: () => JSX.Element
+export const metadata: Metadata = {
+  title: 'Procurement Management System',
+  description: 'Manage procurement requests and supplier evaluations',
 }
 
-export default function OrchestratorPage() {
-  const tabs: TabConfig[] = [
-    {
-      value: "workflows",
-      title: "Workflow Manager",
-      component: () => <WorkflowManager />
-    },
-    {
-      value: "regulations", 
-      title: "Regulation Manager",
-      component: () => <RegulationManager />
-    },
-    {
-      value: "federal-register",
-      title: "Federal Register Search", 
-      component: () => <FederalRegisterSearch />
-    },
-    {
-      value: "rag",
-      title: "RAG Query",
-      component: () => <RAGQueryInterface />
-    }
-  ]
-
+export default function HomePage() {
   return (
     <div className="container py-8">
-      <h1 className="text-4xl font-bold text-[#1E90FF] mb-8 text-center">
-        Advanced Orchestrator Dashboard
-      </h1>
-      <Tabs defaultValue="workflows" className="space-y-4">
-        <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
-          {tabs.map(tab => (
-            <TabsTrigger key={tab.value} value={tab.value}>
-              {tab.title}
-            </TabsTrigger>
-          ))}
+      <h1 className="text-4xl font-bold text-[#1E90FF] mb-8 text-center">Procurement Management System</h1>
+      <Tabs defaultValue="procurement" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-7">
+          <TabsTrigger value="procurement">Procurement</TabsTrigger>
+          <TabsTrigger value="workflows">Workflows</TabsTrigger>
+          <TabsTrigger value="regulations">Regulation Manager</TabsTrigger>
+          <TabsTrigger value="federal-register">Federal Register</TabsTrigger>
+          <TabsTrigger value="rag">RAG Query</TabsTrigger>
+          <TabsTrigger value="database">Database Management</TabsTrigger>
+          <TabsTrigger value="clauses">Clause Manager</TabsTrigger>
         </TabsList>
-        {tabs.map(tab => {
-          return (
-            <TabsContent key={tab.value} value={tab.value}>
-              <Card className="border-[#1E90FF]/10">
-                <CardHeader>
-                  <CardTitle className="text-[#1E90FF]">{tab.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {tab.component()}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          )
-        })}
+        <TabsContent value="procurement">
+          <Card className="border-[#1E90FF]/10">
+            <CardHeader>
+              <CardTitle className="text-[#1E90FF]">Procurement Dashboard</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ProcurementDashboard />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="workflows">
+          <Card className="border-[#1E90FF]/10">
+            <CardHeader>
+              <CardTitle className="text-[#1E90FF]">Workflow Manager</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WorkflowManager />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="regulations">
+          <Card className="border-[#1E90FF]/10">
+            <CardHeader>
+              <CardTitle className="text-[#1E90FF]">Regulation Manager</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RegulationManager />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="federal-register">
+          <Card className="border-[#1E90FF]/10">
+            <CardHeader>
+              <CardTitle className="text-[#1E90FF]">Federal Register Search</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <FederalRegisterSearch />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="rag">
+          <Card className="border-[#1E90FF]/10">
+            <CardHeader>
+              <CardTitle className="text-[#1E90FF]">RAG Query</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RAGQueryInterface />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="database">
+          <Card className="border-[#1E90FF]/10">
+            <CardHeader>
+              <CardTitle className="text-[#1E90FF]">Database Management</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DatabaseManagement />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="clauses">
+          <Card className="border-[#1E90FF]/10">
+            <CardHeader>
+              <CardTitle className="text-[#1E90FF]">Clause Manager</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ClauseManager />
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   )
