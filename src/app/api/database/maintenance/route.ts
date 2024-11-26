@@ -17,7 +17,10 @@ const config = {
     password: process.env.NEO4J_PASSWORD || ''
   },
   liquibase: {
-    changeLogFile: process.env.LIQUIBASE_CHANGELOG_FILE || ''
+    changeLogFile: process.env.LIQUIBASE_CHANGELOG_FILE || '',
+    url: process.env.LIQUIBASE_URL || '',
+    username: process.env.LIQUIBASE_USERNAME || '',
+    password: process.env.LIQUIBASE_PASSWORD || ''
   }
 }
 

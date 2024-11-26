@@ -1,9 +1,9 @@
 import { SearchClient, AzureKeyCredential } from "@azure/search-documents"
-import { DefaultAzureCredential } from "@azure/identity"
 import { KeyClient } from "@azure/keyvault-keys"
 import { Driver } from "neo4j-driver"
 import neo4j from "neo4j-driver"
 import { Pool } from "pg"
+import { DefaultAzureCredential } from "@azure/identity"
 
 interface SearchDocument {
   id: string;
@@ -68,7 +68,7 @@ export class AcquisitionClauseManager {
     )
     this.keyClient = new KeyClient(
       config.keyvault_url,
-      new AzureKeyCredential(config.keyvault_key)
+      new DefaultAzureCredential()
     )
   }
 

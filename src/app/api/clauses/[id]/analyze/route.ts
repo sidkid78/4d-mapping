@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { ClauseAnalyzer } from '@/lib/acquisition-clause-manager'
 
 const config = {
@@ -22,10 +22,14 @@ const config = {
 
 const clauseAnalyzer = new ClauseAnalyzer(config)
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
+    const id = params.id;
     const { role } = await request.json()
-    const analysisResult = await clauseAnalyzer.analyze_clause(params.id, { role })
+    const analysisResult = await clauseAnalyzer.analyze_clause(id, { role })
     return NextResponse.json(analysisResult)
   } catch (error) {
     console.error('Clause analysis failed:', error)
