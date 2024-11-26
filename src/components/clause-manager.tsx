@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { AlertCircle, CheckCircle, FileText, Search } from 'lucide-react'
+import { AlertCircle, FileText } from 'lucide-react'
 
 interface ClauseData {
   nuremberg_number: string;
@@ -26,9 +26,18 @@ interface ClauseData {
 }
 
 interface AnalysisResult {
-  analysis: any;
-  validation: any;
-  recommendations: any;
+  analysis: {
+    findings: string[];
+    risk_level: string;
+  };
+  validation: {
+    is_valid: boolean;
+    issues: string[];
+  };
+  recommendations: {
+    actions: string[];
+    priority: string;
+  };
   timestamp: string;
 }
 
@@ -70,8 +79,9 @@ export default function ClauseManager() {
       if (!response.ok) throw new Error('Failed to create clause')
       const result = await response.json()
       setCreatedClauseId(result.clause_id)
-    } catch (_error) {
+    } catch (error) {
       setError('Failed to create clause')
+      console.error('Creation error:', error)
     } finally {
       setLoading(null)
     }
@@ -93,8 +103,9 @@ export default function ClauseManager() {
       if (!response.ok) throw new Error('Failed to analyze clause')
       const result = await response.json()
       setAnalysisResult(result)
-    } catch (_err) {
+    } catch (error) {
       setError('Failed to analyze clause')
+      console.error('Analysis error:', error)
     } finally {
       setLoading(null)
     }

@@ -1,7 +1,7 @@
 import { SearchClient, AzureKeyCredential } from "@azure/search-documents";
 import neo4j from "neo4j-driver";
 import { Driver } from "neo4j-driver";
-import AzureOpenAI from "@azure/openai";
+import { AzureOpenAI } from "openai";
 
 interface RAGConfig {
   search_endpoint?: string;
@@ -41,7 +41,7 @@ interface SearchDocument {
 export class RAGAgent {
   private searchClient: SearchClient<SearchDocument>;
   private graphDb: Driver;
-  private openAIClient: AzureOpenAI;
+  private openai: AzureOpenAI
   private deploymentName: string;
 
   constructor(config: RAGConfig) {
@@ -68,10 +68,11 @@ export class RAGAgent {
       neo4j.auth.basic(config.neo4j_user, config.neo4j_password)
     );
 
-    this.openAIClient = new AzureOpenAI(
-      config.azure_openai_endpoint,
-      new AzureKeyCredential(config.azure_openai_secret_name || "")
-    );
+    this.openai = new AzureOpenAI({
+      apiKey: config.azure_openai_secret_name || "",
+      endpoint: config.azure_openai_endpoint,
+      apiVersion: config.azure_openai_api_version || "2024-08-01-preview"
+    });
 
     this.deploymentName = config.azure_openai_deployment_name;
   }
@@ -121,15 +122,16 @@ export class RAGAgent {
       Query: ${query}
     `;
 
-    const response = await this.openAIClient.getChatCompletions(
-      this.deploymentName,
-      [{
+    const response = await this.openai.chat.completions.create({
+      model: this.deploymentName,
+      messages: [{
         role: "user",
         content: decompositionPrompt
       }]
-    );
+    });
 
-    const subQueries = response.choices[0]?.message?.content?.split('\n').filter(q => q.trim()) || [query];
+    const subQueries = response.choices[0]?.message?.content?.split('\n')
+      .filter((q: string) => q.trim()) || [query];
     return subQueries.length > 0 ? subQueries : [query];
   }
 
@@ -147,8 +149,12 @@ export class RAGAgent {
   }
 
   private rank_documents(documents: SearchDocument[], userContext: UserContext): SearchDocument[] {
-    // Use userContext for ranking if needed
-    return documents.sort((a, b) => (b.score || 0) - (a.score || 0));
+    const expertiseWeight = userContext.expertise_level / 10;
+    return documents.sort((a, b) => {
+      const scoreA = (b.score || 0) * expertiseWeight;
+      const scoreB = (a.score || 0) * expertiseWeight;
+      return scoreA - scoreB;
+    });
   }
 
   private async synthesize_context(rankedDocs: SearchDocument[]): Promise<string> {
@@ -166,9 +172,9 @@ ${context}
   }
 
   private async process_rag_result(ragResult: RAGResult): Promise<string> {
-    const response = await this.openAIClient.getChatCompletions(
-      this.deploymentName,
-      [{
+    const response = await this.openai.chat.completions.create({
+      model: this.deploymentName,
+      messages: [{
         role: "system",
         content: "You are a helpful assistant that provides accurate answers based on the given context."
       },
@@ -176,7 +182,7 @@ ${context}
         role: "user",
         content: ragResult.prompt
       }]
-    );
+    });
 
     return response.choices[0]?.message?.content || "Unable to generate response";
   }

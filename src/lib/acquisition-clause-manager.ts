@@ -1,7 +1,15 @@
 import { SearchClient, AzureKeyCredential } from "@azure/search-documents"
-import { KeyClient } from "@azure/keyvault-keys"
-import { Client as Neo4jClient } from "neo4j-driver"
+import { DefaultAzureCredential } from "@azure/identity"
+import { Driver } from "neo4j-driver"
+import neo4j from "neo4j-driver"
 import { Pool } from "pg"
+
+interface SearchDocument {
+  id: string;
+  title: string;
+  content: string;
+  [key: string]: unknown;
+}
 
 interface Config {
   postgresql: {
@@ -42,17 +50,17 @@ interface AnalysisResult {
 
 export class AcquisitionClauseManager {
   private pgPool: Pool
-  private neo4jClient: Neo4jClient
-  private searchClient: SearchClient
+  private neo4jClient: Driver
+  private searchClient: SearchClient<SearchDocument>
   private keyClient: KeyClient
 
   constructor(config: Config) {
     this.pgPool = new Pool(config.postgresql)
-    this.neo4jClient = new Neo4jClient(
+    this.neo4jClient = neo4j.driver(
       config.neo4j.uri,
-      { auth: { username: config.neo4j.user, password: config.neo4j.password }}
+      neo4j.auth.basic(config.neo4j.user, config.neo4j.password)
     )
-    this.searchClient = new SearchClient(
+    this.searchClient = new SearchClient<SearchDocument>(
       config.search_endpoint,
       "clauses",
       new AzureKeyCredential(config.search_key)
@@ -114,18 +122,18 @@ export class AcquisitionClauseManager {
 }
 
 export class ClauseAnalyzer {
-  private searchClient: SearchClient
-  private neo4jClient: Neo4jClient
+  private searchClient: SearchClient<SearchDocument>
+  private neo4jClient: Driver
 
   constructor(config: Config) {
-    this.searchClient = new SearchClient(
+    this.searchClient = new SearchClient<SearchDocument>(
       config.search_endpoint,
       "clauses", 
       new AzureKeyCredential(config.search_key)
     )
-    this.neo4jClient = new Neo4jClient(
+    this.neo4jClient = neo4j.driver(
       config.neo4j.uri,
-      { auth: { username: config.neo4j.user, password: config.neo4j.password }}
+      neo4j.auth.basic(config.neo4j.user, config.neo4j.password)
     )
   }
 
@@ -155,7 +163,7 @@ export class ClauseAnalyzer {
       // Generate recommendations
       const recommendations = this.generateRecommendations(riskScore, options.role)
 
-      const relatedClauses = searchResults.results.map(r => r.document.id as string)
+      const relatedClauses = await this.getRelatedClauses(searchResults)
 
       return {
         risk_score: riskScore,
@@ -169,7 +177,7 @@ export class ClauseAnalyzer {
     }
   }
 
-  private calculateRiskScore(relationships: any[], role: string): number {
+  private calculateRiskScore(relationships: Record<string, unknown>[], role: string): number {
     // Simplified risk scoring logic
     const baseScore = 0.5
     const relationshipFactor = relationships.length * 0.1
@@ -191,5 +199,9 @@ export class ClauseAnalyzer {
     }
 
     return recommendations
+  }
+
+  private async getRelatedClauses(searchResults: any) {
+    return searchResults.results.map((r: { document: { id: string } }) => r.document.id)
   }
 }

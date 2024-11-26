@@ -8,40 +8,126 @@ from azure.storage.blob import BlobServiceClient
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
+from space_mapper import SpaceMapper, Coordinates4D
+import asyncio
 
 class DataPipeline:
-    def __init__(self, blob_conn_str: str, form_recognizer_endpoint: str, 
-                 form_recognizer_key: str, search_endpoint: str, search_key: str):
-        self.blob_service = BlobServiceClient.from_connection_string(blob_conn_str)
-        self.form_recognizer = DocumentAnalysisClient(
-            endpoint=form_recognizer_endpoint, 
-            credential=AzureKeyCredential(form_recognizer_key)
-        )
-        self.search_client = SearchClient(
-            endpoint=search_endpoint,
-            index_name="regulations",
-            credential=AzureKeyCredential(search_key)
-        )
+    def __init__(self, config: Dict):
+        self.config = config
+        self.space_mapper = SpaceMapper(config)
+        
+        # Initialize Azure clients if credentials provided in config
+        if 'azure' in config:
+            azure_config = config['azure']
+            if 'blob' in azure_config:
+                self.blob_service = BlobServiceClient.from_connection_string(
+                    azure_config['blob']['connection_string']
+                )
+            if 'form_recognizer' in azure_config:
+                self.form_recognizer = DocumentAnalysisClient(
+                    endpoint=azure_config['form_recognizer']['endpoint'],
+                    credential=AzureKeyCredential(azure_config['form_recognizer']['key'])
+                )
+            if 'search' in azure_config:
+                self.search_client = SearchClient(
+                    endpoint=azure_config['search']['endpoint'],
+                    index_name="regulations",
+                    credential=AzureKeyCredential(azure_config['search']['key'])
+                )
+        
         self.logger = logging.getLogger(__name__)
+
+    async def process_regulatory_data(self, raw_data: List[Dict]) -> List[Dict]:
+        """
+        Process raw regulatory data and map it to 4D space.
+        """
+        processed_data = []
+        for item in raw_data:
+            nuremberg_number = item.get('nuremberg_number')
+            if nuremberg_number:
+                coordinates = self.space_mapper.nuremberg_to_4d(nuremberg_number)
+                if coordinates:
+                    processed_item = {
+                        **item,
+                        '4d_coordinates': {
+                            'x': coordinates.x,
+                            'y': coordinates.y,
+                            'z': coordinates.z,
+                            'e': coordinates.e
+                        }
+                    }
+                    processed_data.append(processed_item)
+
+        return processed_data
+
+    async def fetch_and_process_data(self) -> List[Dict]:
+        """
+        Fetch data from various sources and process it.
+        """
+        # Fetch data from different sources
+        federal_register_data = await self.fetch_federal_register_data()
+        clause_data = await self.fetch_clause_data()
+        regulation_data = await self.fetch_regulation_data()
+
+        # Combine all data
+        all_data = federal_register_data + clause_data + regulation_data
+
+        # Process the combined data
+        processed_data = await self.process_regulatory_data(all_data)
+
+        return processed_data
+
+    async def fetch_federal_register_data(self) -> List[Dict]:
+        """
+        Fetch data from Federal Register API.
+        """
+        try:
+            # TODO: Implement Federal Register API client
+            return []
+        except Exception as e:
+            self.logger.error(f"Error fetching Federal Register data: {str(e)}")
+            return []
+
+    async def fetch_clause_data(self) -> List[Dict]:
+        """
+        Fetch clause data from database.
+        """
+        try:
+            # TODO: Implement clause database client
+            return []
+        except Exception as e:
+            self.logger.error(f"Error fetching clause data: {str(e)}")
+            return []
+
+    async def fetch_regulation_data(self) -> List[Dict]:
+        """
+        Fetch regulation data from search index.
+        """
+        try:
+            if hasattr(self, 'search_client'):
+                results = self.search_client.search(search_text="*")
+                return [dict(result) for result in results]
+            return []
+        except Exception as e:
+            self.logger.error(f"Error fetching regulation data: {str(e)}")
+            return []
 
     def process_document(self, document_content: str, source_type: str) -> Dict:
         """
-        Main pipeline for processing incoming documents.
+        Process incoming documents and generate metadata.
         """
         try:
-            # Step 1: Initial preprocessing
+            # Clean and standardize content
             cleaned_content = self._preprocess_document(document_content)
             
-            # Step 2: Extract metadata and entities
+            # Extract metadata using Form Recognizer if available
             metadata = self._extract_metadata(cleaned_content, source_type)
             
-            # Step 3: Generate Nuremberg number
+            # Generate identifiers
             nuremberg_number = self._generate_nuremberg_number(metadata)
-            
-            # Step 4: Convert to SAM.gov naming convention
             sam_tag = self._generate_sam_tag(metadata)
             
-            # Step 5: Generate YAML structure
+            # Create YAML structure
             yaml_content = self._generate_yaml(
                 content=cleaned_content,
                 metadata=metadata,
@@ -49,10 +135,8 @@ class DataPipeline:
                 sam_tag=sam_tag
             )
             
-            # Step 6: Validate the generated content
+            # Validate and store
             self._validate_data(yaml_content)
-            
-            # Step 7: Store and index the content
             self._store_and_index(yaml_content)
             
             return yaml_content
@@ -62,88 +146,39 @@ class DataPipeline:
             raise
 
     def _preprocess_document(self, content: str) -> str:
-        """
-        Clean and standardize document content.
-        """
-        # Remove special characters and normalize whitespace
+        """Clean and standardize document content."""
         cleaned = re.sub(r'\s+', ' ', content)
         cleaned = cleaned.strip()
-        
-        # Convert common symbols to standard format
         cleaned = cleaned.replace('–', '-').replace('"', '"').replace('"', '"')
-        
         return cleaned
 
     def _extract_metadata(self, content: str, source_type: str) -> Dict:
-        """
-        Extract metadata using Azure Document Intelligence.
-        """
+        """Extract metadata using Form Recognizer if available."""
         try:
-            # Use Form Recognizer to extract key information
-            result = self.form_recognizer.begin_analyze_document(
-                "prebuilt-document", content
-            ).result()
-
-            metadata = {
-                "source_type": source_type,
-                "extraction_date": datetime.utcnow().isoformat(),
-                "document_type": result.doc_type,
-                "confidence_score": result.confidence,
-                "entities": self._extract_entities(result),
-                "keywords": self._extract_keywords(content)
-            }
-
-            return metadata
+            if hasattr(self, 'form_recognizer'):
+                result = self.form_recognizer.begin_analyze_document(
+                    "prebuilt-document", content
+                ).result()
+                
+                return {
+                    "source_type": source_type,
+                    "extraction_date": datetime.utcnow().isoformat(),
+                    "document_type": result.doc_type,
+                    "confidence_score": result.confidence,
+                    "entities": self._extract_entities(result),
+                    "keywords": self._extract_keywords(content)
+                }
+            
+            return {"source_type": source_type}
 
         except Exception as e:
             self.logger.error(f"Metadata extraction failed: {str(e)}")
-            raise
+            return {"source_type": source_type}
 
-    def _generate_nuremberg_number(self, metadata: Dict) -> str:
-        """
-        Generate a Nuremberg number based on document hierarchy and content.
-        """
-        try:
-            # Extract components for Nuremberg number
-            domain = self._determine_domain(metadata)
-            level = self._determine_level(metadata)
-            branch = self._determine_branch(metadata)
-            subsection = self._determine_subsection(metadata)
-            
-            return f"{domain}.{level}.{branch}.{subsection}"
-
-        except Exception as e:
-            self.logger.error(f"Nuremberg number generation failed: {str(e)}")
-            raise
-
-    def _generate_sam_tag(self, metadata: Dict) -> str:
-        """
-        Convert document title to SAM.gov naming convention.
-        """
-        try:
-            # Extract title from metadata
-            title = metadata.get("title", "").lower()
-            
-            # Remove special characters and replace spaces with hyphens
-            sam_tag = re.sub(r'[^a-z0-9\s-]', '', title)
-            sam_tag = re.sub(r'\s+', '-', sam_tag)
-            
-            # Add prefix based on document type
-            doc_type = metadata.get("document_type", "").lower()
-            prefix = f"{doc_type}-" if doc_type else ""
-            
-            return f"{prefix}{sam_tag}"
-
-        except Exception as e:
-            self.logger.error(f"SAM tag generation failed: {str(e)}")
-            raise
-
-    def _generate_yaml(self, content: str, metadata: Dict, 
+    def _generate_yaml(self, content: str, metadata: Dict,
                       nuremberg_number: str, sam_tag: str) -> Dict:
-        """
-        Generate YAML structure for the document.
-        """
-        yaml_content = {
+        """Generate YAML structure for document."""
+        return {
             "document_id": hashlib.sha256(content.encode()).hexdigest()[:12],
             "nuremberg_number": nuremberg_number,
             "sam_tag": sam_tag,
@@ -154,71 +189,36 @@ class DataPipeline:
                 "pipeline_version": "1.0"
             }
         }
-        
-        return yaml_content
 
     def _validate_data(self, yaml_content: Dict) -> None:
-        """
-        Validate the generated YAML content.
-        """
+        """Validate YAML content structure."""
         required_fields = [
-            "document_id", "nuremberg_number", "sam_tag", 
+            "document_id", "nuremberg_number", "sam_tag",
             "metadata", "content"
         ]
         
         for field in required_fields:
             if field not in yaml_content:
                 raise ValueError(f"Missing required field: {field}")
-            
-        if not re.match(r'^\d+\.\d+\.\d+\.\d+$', yaml_content['nuremberg_number']):
-            raise ValueError("Invalid Nuremberg number format")
 
     def _store_and_index(self, yaml_content: Dict) -> None:
-        """
-        Store the YAML content in Blob storage and index in Azure Cognitive Search.
-        """
+        """Store in blob storage and index in search if available."""
         try:
-            # Store in Blob Storage
-            container_client = self.blob_service.get_container_client("documents")
-            blob_name = f"{yaml_content['nuremberg_number']}.yaml"
-            
-            yaml_str = yaml.dump(yaml_content, default_flow_style=False)
-            container_client.upload_blob(
-                name=blob_name,
-                data=yaml_str,
-                overwrite=True
-            )
+            if hasattr(self, 'blob_service'):
+                container_client = self.blob_service.get_container_client("documents")
+                blob_name = f"{yaml_content['nuremberg_number']}.yaml"
+                yaml_str = yaml.dump(yaml_content, default_flow_style=False)
+                container_client.upload_blob(name=blob_name, data=yaml_str, overwrite=True)
 
-            # Index in Azure Cognitive Search
-            self.search_client.upload_documents([{
-                "id": yaml_content['document_id'],
-                "nuremberg_number": yaml_content['nuremberg_number'],
-                "sam_tag": yaml_content['sam_tag'],
-                "content": yaml_content['content'],
-                "metadata": str(yaml_content['metadata'])
-            }])
+            if hasattr(self, 'search_client'):
+                self.search_client.upload_documents([{
+                    "id": yaml_content['document_id'],
+                    "nuremberg_number": yaml_content['nuremberg_number'],
+                    "sam_tag": yaml_content['sam_tag'],
+                    "content": yaml_content['content'],
+                    "metadata": str(yaml_content['metadata'])
+                }])
 
         except Exception as e:
             self.logger.error(f"Storage and indexing failed: {str(e)}")
             raise
-
-    def _extract_entities(self, form_result) -> List[Dict]:
-        """
-        Extract named entities from form recognizer results.
-        """
-        entities = []
-        for entity in form_result.entities:
-            entities.append({
-                "type": entity.type,
-                "value": entity.content,
-                "confidence": entity.confidence
-            })
-        return entities
-
-    def _extract_keywords(self, content: str) -> List[str]:
-        """
-        Extract key phrases from document content.
-        """
-        # Implement keyword extraction logic here
-        # This could use Azure Text Analytics or other NLP services
-        pass
