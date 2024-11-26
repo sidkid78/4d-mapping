@@ -1,5 +1,6 @@
 import { SearchClient, AzureKeyCredential } from "@azure/search-documents"
 import { DefaultAzureCredential } from "@azure/identity"
+import { KeyClient } from "@azure/keyvault-keys"
 import { Driver } from "neo4j-driver"
 import neo4j from "neo4j-driver"
 import { Pool } from "pg"
@@ -115,7 +116,7 @@ export class AcquisitionClauseManager {
   async delete_clause(id: string) {
     await Promise.all([
       this.pgPool.query('DELETE FROM clauses WHERE id = $1', [id]),
-      this.searchClient.deleteDocuments([{ id }]),
+      this.searchClient.deleteDocuments([{ id, title: '', content: '' }]), // Add required fields
       this.neo4jClient.session().run('MATCH (c:Clause {id: $id}) DELETE c', { id })
     ])
   }
@@ -153,17 +154,32 @@ export class ClauseAnalyzer {
          RETURN type(r) as relationship, related.id as relatedId`,
         { clauseId }
       )
-
       // Calculate risk score based on role and relationships
-      const riskScore = this.calculateRiskScore(graphResults.records, options.role)
+      const riskScore = this.calculateRiskScore(
+        graphResults.records.map(record => ({
+          relationship: record.get('relationship'),
+          relatedId: record.get('relatedId')
+        })),
+        options.role
+      )
 
-      // Determine compliance status
+      // Determine compliance status  
       const complianceStatus = riskScore > 0.7 ? "Compliant" : "Review Required"
 
       // Generate recommendations
       const recommendations = this.generateRecommendations(riskScore, options.role)
 
-      const relatedClauses = await this.getRelatedClauses(searchResults)
+      // Convert AsyncIterableIterator to array
+      const searchResultsArray = []
+      for await (const result of searchResults.results) {
+        searchResultsArray.push(result)
+      }
+
+      const relatedClauses = await this.getRelatedClauses({
+        results: searchResultsArray.map(result => ({
+          document: { id: result.document.id }
+        }))
+      })
 
       return {
         risk_score: riskScore,
@@ -201,7 +217,7 @@ export class ClauseAnalyzer {
     return recommendations
   }
 
-  private async getRelatedClauses(searchResults: any) {
+  private async getRelatedClauses(searchResults: { results: Array<{ document: { id: string } }> }) {
     return searchResults.results.map((r: { document: { id: string } }) => r.document.id)
   }
 }
