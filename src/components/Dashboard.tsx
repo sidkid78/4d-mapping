@@ -1,12 +1,13 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Camera, Settings, AlertCircle, Search, X } from 'lucide-react'
 import { LineChart, XAxis, YAxis, Tooltip, Line, ResponsiveContainer } from 'recharts'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
+import { MouseEvent as ReactMouseEvent } from 'react'
 
 interface NavItemProps {
   icon: React.ReactNode
@@ -317,7 +318,7 @@ const KnowledgeGraphViewer: React.FC<KnowledgeGraphViewerProps> = ({ data, exper
     })
   }, [data, expertiseLevel])
 
-  const handleClick = useCallback((event: MouseEvent) => {
+  const handleClick = (event: ReactMouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -334,7 +335,7 @@ const KnowledgeGraphViewer: React.FC<KnowledgeGraphViewerProps> = ({ data, exper
         onNodeSelect(node)
       }
     })
-  }, [data, onNodeSelect])
+  }
 
   return (
     <canvas

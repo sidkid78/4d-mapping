@@ -1,12 +1,23 @@
 import { NextResponse } from 'next/server'
-import { DatabaseMaintenance } from '@/lib/database_management_system'
+import { DatabaseMaintenance } from '@/lib/database-management-system'
 
 const config = {
+  storage_connection_string: process.env.STORAGE_CONNECTION_STRING || '',
+  subscription_id: process.env.SUBSCRIPTION_ID || '',
   postgresql: {
-    // PostgreSQL connection details
+    host: process.env.POSTGRES_HOST || '',
+    port: parseInt(process.env.POSTGRES_PORT || '5432'),
+    database: process.env.POSTGRES_DB || '',
+    user: process.env.POSTGRES_USER || '',
+    password: process.env.POSTGRES_PASSWORD || ''
   },
   neo4j: {
-    // Neo4j connection details
+    uri: process.env.NEO4J_URI || '',
+    user: process.env.NEO4J_USER || '',
+    password: process.env.NEO4J_PASSWORD || ''
+  },
+  liquibase: {
+    changeLogFile: process.env.LIQUIBASE_CHANGELOG_FILE || ''
   }
 }
 
@@ -17,10 +28,10 @@ export async function POST(request: Request) {
     const { database } = await request.json()
 
     if (database === 'postgresql') {
-      const result = await dbMaintenance.perform_postgresql_maintenance()
+      const result = await dbMaintenance.performPostgresqlMaintenance()
       return NextResponse.json(result)
     } else if (database === 'neo4j') {
-      const result = await dbMaintenance.perform_neo4j_maintenance()
+      const result = await dbMaintenance.performNeo4jMaintenance()
       return NextResponse.json(result)
     } else {
       return NextResponse.json({ error: 'Invalid database specified' }, { status: 400 })
