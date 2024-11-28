@@ -1,3 +1,47 @@
+"""
+Document processing and RAG pipeline for regulatory documents.
+
+This module provides two main classes:
+- DocumentProcessor: Processes and analyzes regulatory documents using Azure services
+- RAGAgent: Implements retrieval-augmented generation for intelligent document querying
+
+The document processor handles:
+- Document preprocessing and cleaning
+- Metadata extraction 
+- Entity recognition
+- 4D coordinate mapping
+- Document storage and indexing
+
+The RAG agent provides:
+- Query decomposition into semantic and coordinate-based sub-queries
+- Multi-strategy document retrieval
+- Context-aware document ranking
+- Response synthesis with expertise-level adaptation
+
+Example:
+    ```python
+    # Process a new document
+    config = {
+        "form_recognizer_endpoint": "https://...",
+        "blob_connection_string": "DefaultEndpointsProtocol=https;..."
+    }
+    processor = DocumentProcessor(config)
+    result = await processor.process_document(doc_content, "regulation.pdf")
+
+    # Query using RAG
+    agent = RAGAgent(config)
+    response = await agent.process_query(
+        "What are the cybersecurity requirements?",
+        {"expertise_level": 3}
+    )
+    ```
+
+Attributes:
+    DocumentMetadata: Dataclass for storing document metadata
+    DocumentProcessor: Main document processing class
+    RAGAgent: Main RAG implementation class
+"""
+
 from typing import Dict, List, Optional, Union
 import asyncio
 from datetime import datetime

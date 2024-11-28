@@ -8,234 +8,178 @@ import math
 
 @dataclass
 class Coordinates4D:
+    """
+    Represents a point in 4D regulatory space.
+    
+    Attributes:
+        x (int): Pillar dimension (1-5) representing major regulatory domains
+        y (int): Level dimension (1-4) indicating complexity of regulation
+        z (float): Branch and subsection coordinates within a domain
+        e (int): Expertise level dimension (1-5) required for comprehension
+    """
     x: int  # Pillar
-    y: int  # Level
+    y: int  # Level 
     z: float  # Branch and Subsection
     e: int  # Expertise Level
 
 class MappingSystem:
-    def __init__(self, neo4j_uri: str, neo4j_auth: Tuple[str, str], 
+    """
+    Maps regulatory data to a 4D coordinate system and provides spatial search capabilities.
+    
+    The system uses Neo4j for graph storage and Azure Search for text search functionality.
+    Coordinates are mapped across four dimensions: pillar, level, branch/subsection, and expertise.
+    
+    Attributes:
+        graph_db: Neo4j database driver for graph operations
+        search_client: Azure Search client for text search
+        logger: Logging instance for error tracking
+        pillar_map (dict): Maps regulatory domains to x coordinates
+        level_map (dict): Maps complexity levels to y coordinates
+        expertise_map (dict): Maps expertise levels to e coordinates
+    """
+    def __init__(self, neo4j_uri: str, neo4j_auth: Tuple[str, str],
                  search_endpoint: str, search_key: str):
+        """
+        Initialize the mapping system with database connections.
+        
+        Args:
+            neo4j_uri (str): URI for Neo4j database connection
+            neo4j_auth (Tuple[str, str]): Neo4j authentication credentials (username, password)
+            search_endpoint (str): Azure Search service endpoint
+            search_key (str): Azure Search API key
+        """
         self.graph_db = GraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
         self.search_client = SearchClient(
             endpoint=search_endpoint,
-            index_name="regulations",
+            index_name="regulations", 
             credential=AzureKeyCredential(search_key)
         )
         self.logger = logging.getLogger(__name__)
         
-        # Expertise level mapping
-        self.expertise_mapping = {
-            'Bachelors Degree': 1,
-            'Masters Degree': 2,
-            'PhD': 3,
-            'Certification Level 1': 4,
-            'Certification Level 2': 5,
-            '5+ Years Experience': 6
+        # Initialize mapping dimensions
+        self.pillar_map = {
+            "SAFETY": 1,
+            "QUALITY": 2, 
+            "COMPLIANCE": 3,
+            "OPERATIONS": 4,
+            "GOVERNANCE": 5
+        }
+        
+        self.level_map = {
+            "FOUNDATIONAL": 1,
+            "INTERMEDIATE": 2,
+            "ADVANCED": 3,
+            "EXPERT": 4
+        }
+        
+        self.expertise_map = {
+            "ENTRY": 1,
+            "INTERMEDIATE": 2,
+            "ADVANCED": 3,
+            "EXPERT": 4,
+            "SPECIALIST": 5
         }
 
-    def generate_coordinates(self, nuremberg_number: str) -> Optional[Coordinates4D]:
+    def map_coordinates(self, data: Dict) -> Optional[Coordinates4D]:
         """
-        Generate 4D coordinates from a Nuremberg number.
+        Map input data to 4D coordinates based on regulatory domain.
+        
+        Args:
+            data (Dict): Input data containing domain, complexity, section, subsection and expertise
+                        fields for coordinate mapping
+        
+        Returns:
+            Optional[Coordinates4D]: 4D coordinates if mapping successful, None if error occurs
+        
+        Raises:
+            ValueError: If input data contains invalid pillar, level or expertise values
         """
         try:
-            parts = nuremberg_number.split('.')
-            if len(parts) != 4:
-                raise ValueError("Invalid Nuremberg number format")
+            # Extract key attributes
+            pillar = data.get("domain", "").upper()
+            level = data.get("complexity", "").upper()
+            branch = data.get("section", 0)
+            subsection = data.get("subsection", 0)
+            expertise = data.get("expertise", "").upper()
 
-            coordinates = Coordinates4D(
-                x=int(parts[0]),  # Pillar
-                y=int(parts[1]),  # Level
-                z=float(f"{parts[2]}.{parts[3]}"),  # Branch and Subsection
-                e=self.get_expertise_level(nuremberg_number)
+            # Validate and map coordinates
+            if pillar not in self.pillar_map:
+                raise ValueError(f"Invalid pillar: {pillar}")
+            if level not in self.level_map:
+                raise ValueError(f"Invalid level: {level}")
+            if expertise not in self.expertise_map:
+                raise ValueError(f"Invalid expertise: {expertise}")
+
+            # Calculate z coordinate from branch and subsection
+            z_coord = float(f"{branch}.{subsection}")
+
+            return Coordinates4D(
+                x=self.pillar_map[pillar],
+                y=self.level_map[level],
+                z=z_coord,
+                e=self.expertise_map[expertise]
             )
-            
-            return coordinates
 
         except Exception as e:
-            self.logger.error(f"Error generating coordinates: {str(e)}")
+            self.logger.error(f"Error mapping coordinates: {str(e)}")
             return None
 
-    def get_expertise_level(self, nuremberg_number: str) -> int:
+    def calculate_distance(self, coord1: Coordinates4D, coord2: Coordinates4D) -> float:
         """
-        Retrieve expertise level from metadata.
+        Calculate Euclidean distance between two 4D coordinates.
+        
+        Args:
+            coord1 (Coordinates4D): First coordinate point
+            coord2 (Coordinates4D): Second coordinate point
+            
+        Returns:
+            float: Euclidean distance between the two points
         """
-        try:
-            with self.graph_db.session() as session:
-                result = session.run("""
-                    MATCH (r:Regulation {NurembergNumber: $number})
-                    RETURN r.RequiredExpertise as expertise
-                    """, number=nuremberg_number)
-                
-                record = result.single()
-                if record and record["expertise"] in self.expertise_mapping:
-                    return self.expertise_mapping[record["expertise"]]
-                return 0  # Default expertise level
+        return math.sqrt(
+            (coord1.x - coord2.x) ** 2 +
+            (coord1.y - coord2.y) ** 2 +
+            (coord1.z - coord2.z) ** 2 +
+            (coord1.e - coord2.e) ** 2
+        )
 
-        except Exception as e:
-            self.logger.error(f"Error retrieving expertise level: {str(e)}")
-            return 0
-
-    def create_honeycomb_relationship(self, 
-                                    source_number: str, 
-                                    target_number: str, 
-                                    crosswalk_type: str) -> bool:
+    def find_nearest_neighbors(self, coord: Coordinates4D, k: int = 5) -> List[Dict]:
         """
-        Create a honeycomb crosswalk relationship between regulations.
-        """
-        try:
-            with self.graph_db.session() as session:
-                result = session.run("""
-                    MATCH (r1:Regulation {NurembergNumber: $source})
-                    MATCH (r2:Regulation {NurembergNumber: $target})
-                    CREATE (r1)-[:CROSSWALK {
-                        CrosswalkType: $type,
-                        CreatedAt: timestamp()
-                    }]->(r2)
-                    RETURN true
-                    """, 
-                    source=source_number,
-                    target=target_number,
-                    type=crosswalk_type
-                )
-                return result.single()[0]
-
-        except Exception as e:
-            self.logger.error(f"Error creating honeycomb relationship: {str(e)}")
-            return False
-
-    def create_spider_web_node(self, 
-                             clause_id: str, 
-                             name: str, 
-                             related_regulations: List[str]) -> bool:
-        """
-        Create a spider web node with connections to related regulations.
-        """
-        try:
-            with self.graph_db.session() as session:
-                # Create the central clause node
-                session.run("""
-                    CREATE (clause:Provision {
-                        ClauseID: $id,
-                        Name: $name,
-                        CreatedAt: timestamp()
-                    })
-                    """,
-                    id=clause_id,
-                    name=name
-                )
-                
-                # Create relationships to regulations
-                for reg_number in related_regulations:
-                    session.run("""
-                        MATCH (clause:Provision {ClauseID: $clause_id})
-                        MATCH (reg:Regulation {NurembergNumber: $reg_number})
-                        CREATE (clause)-[:RELATED_TO {
-                            CreatedAt: timestamp()
-                        }]->(reg)
-                        """,
-                        clause_id=clause_id,
-                        reg_number=reg_number
-                    )
-                
-                return True
-
-        except Exception as e:
-            self.logger.error(f"Error creating spider web node: {str(e)}")
-            return False
-
-    async def coordinate_based_search(self, 
-                                    coordinates: Coordinates4D, 
-                                    radius: float = 1.0) -> List[Dict]:
-        """
-        Perform coordinate-based search with expertise filtering.
+        Find k-nearest neighbors to given coordinates in the regulatory space.
+        
+        Args:
+            coord (Coordinates4D): Reference coordinates to search from
+            k (int, optional): Number of nearest neighbors to return. Defaults to 5.
+            
+        Returns:
+            List[Dict]: List of k nearest regulations with their distances, empty list if error occurs
         """
         try:
             with self.graph_db.session() as session:
                 results = session.run("""
                     MATCH (r:Regulation)
-                    WHERE 
-                        r.X = $x AND
-                        r.Y = $y AND
-                        abs(r.Z - $z) <= $radius AND
-                        r.E <= $e
-                    RETURN r
+                    WITH r, 
+                    sqrt(
+                        (r.X - $x)^2 + 
+                        (r.Y - $y)^2 + 
+                        (r.Z - $z)^2 + 
+                        (r.E - $e)^2
+                    ) as distance
+                    ORDER BY distance ASC
+                    LIMIT $k
+                    RETURN r, distance
                     """,
-                    x=coordinates.x,
-                    y=coordinates.y,
-                    z=coordinates.z,
-                    e=coordinates.e,
-                    radius=radius
+                    x=coord.x,
+                    y=coord.y,
+                    z=coord.z,
+                    e=coord.e,
+                    k=k
                 )
                 
-                return [dict(record["r"]) for record in results]
+                return [{
+                    "regulation": dict(record["r"]),
+                    "distance": record["distance"]
+                } for record in results]
 
         except Exception as e:
-            self.logger.error(f"Error in coordinate search: {str(e)}")
-            return []
-
-    async def traverse_crosswalks(self, 
-                                start_number: str, 
-                                max_depth: int = 3,
-                                crosswalk_type: Optional[str] = None) -> List[Dict]:
-        """
-        Traverse the honeycomb structure following crosswalk relationships.
-        """
-        try:
-            with self.graph_db.session() as session:
-                query = """
-                    MATCH path = (r:Regulation {NurembergNumber: $number})-[:CROSSWALK*1..$depth]->(related)
-                    WHERE $type IS NULL OR 
-                          ALL(rel IN relationships(path) WHERE rel.CrosswalkType = $type)
-                    RETURN path
-                    """
-                
-                results = session.run(
-                    query,
-                    number=start_number,
-                    depth=max_depth,
-                    type=crosswalk_type
-                )
-                
-                paths = []
-                for record in results:
-                    path = record["path"]
-                    paths.append({
-                        "nodes": [dict(node) for node in path.nodes],
-                        "relationships": [dict(rel) for rel in path.relationships]
-                    })
-                
-                return paths
-
-        except Exception as e:
-            self.logger.error(f"Error traversing crosswalks: {str(e)}")
-            return []
-
-    async def semantic_search(self, 
-                            query: str, 
-                            domain: Optional[str] = None,
-                            min_expertise: int = 0) -> List[Dict]:
-        """
-        Perform semantic search using Azure Cognitive Search.
-        """
-        try:
-            filter_condition = None
-            if domain:
-                filter_condition = f"Domain eq '{domain}'"
-            if min_expertise > 0:
-                expertise_filter = f"ExpertiseLevel ge {min_expertise}"
-                filter_condition = expertise_filter if not filter_condition else f"{filter_condition} and {expertise_filter}"
-
-            results = self.search_client.search(
-                search_text=query,
-                filter=filter_condition,
-                semantic_configuration_name="regulatory-config",
-                include_total_count=True,
-                highlight_fields="Content"
-            )
-
-            return [dict(result) for result in results]
-
-        except Exception as e:
-            self.logger.error(f"Error in semantic search: {str(e)}")
+            self.logger.error(f"Error finding nearest neighbors: {str(e)}")
             return []

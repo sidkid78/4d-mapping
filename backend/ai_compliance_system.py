@@ -240,7 +240,7 @@ class ComplianceAI:
                 "compliance_details": compliance_check,
                 "bias_analysis": bias_analysis,
                 "ethical_assessment": ethical_assessment,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(datetime.UTC).isoformat()
             }
             
         except Exception as e:

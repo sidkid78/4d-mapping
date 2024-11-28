@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { MainNav } from '@/components/main-nav'
 
 export function Header() {
   return (
@@ -9,23 +10,7 @@ export function Header() {
           <Link href="/" className="flex items-center space-x-2">
             <span className="text-2xl font-bold text-[#1E90FF]">Procurity.ai</span>
           </Link>
-          <nav className="hidden md:flex gap-6">
-            <Link href="/" className="text-sm font-medium hover:text-[#1E90FF]">
-              Home
-            </Link>
-            <Link href="/about" className="text-sm font-medium hover:text-[#1E90FF]">
-              About Us
-            </Link>
-            <Link href="/solutions" className="text-sm font-medium hover:text-[#1E90FF]">
-              Solutions
-            </Link>
-            <Link href="/resources" className="text-sm font-medium hover:text-[#1E90FF]">
-              Resources
-            </Link>
-            <Link href="/contact" className="text-sm font-medium hover:text-[#1E90FF]">
-              Contact
-            </Link>
-          </nav>
+          <MainNav />
         </div>
         <div className="flex items-center gap-4">
           <Button variant="ghost">Sign In</Button>

@@ -1,26 +1,13 @@
 import { NextResponse } from 'next/server'
+import { OpenAIEmbeddings } from '@azure/openai'
 import type { Coordinates4D } from '@/types/space-mapper'
 
-// Define QueryEngine class
-class QueryEngine {
-  private config: Config;
-
-  constructor(config: Config) {
-    this.config = config;
-  }
-
-  /* eslint-disable @typescript-eslint/no-unused-vars */
-  async semanticQuery(_query: string, _context: QueryContext): Promise<SemanticResult[]> {
-    return []
-  }
-
-  async coordinateQuery(_coordinates: Coordinates4D): Promise<Document[]> {
-    return []
-  }
-  /* eslint-enable @typescript-eslint/no-unused-vars */
+interface Config {
+  azure_endpoint: string
+  azure_deployment: string 
+  azure_key: string
 }
 
-// Define document type
 interface Document {
   id: string
   content: string
@@ -28,13 +15,17 @@ interface Document {
   score: number
 }
 
-// Update context type
 interface QueryContext {
-  filters?: Record<string, string>
-  options?: Record<string, string>
+  maxResults?: number
+  minSimilarity?: number
+  sourceFilter?: string
 }
 
 interface SemanticResult {
+  id: string
+  content: string
+  metadata: Record<string, any>
+  similarity: number
   coordinates4D: Coordinates4D
 }
 
@@ -45,10 +36,58 @@ interface QueryResponse {
   response: string
 }
 
-interface Config {
-  azure_endpoint: string
-  azure_deployment: string
-  azure_key: string
+class QueryEngine {
+  private config: Config
+
+  constructor(config: Config) {
+    this.config = config
+  }
+
+  async semanticQuery(query: string, context: QueryContext): Promise<SemanticResult[]> {
+    const client = new OpenAIEmbeddings({
+      apiKey: this.config.azure_key,
+      apiVersion: "2024-02-15-preview",
+      endpoint: this.config.azure_endpoint
+    })
+
+    const queryEmbedding = await client.embeddings.create({
+      input: query,
+      model: "text-embedding-3-small"
+    })
+
+    const maxResults = context.maxResults ?? 5
+    const minSimilarity = context.minSimilarity ?? 0.7
+    const sourceFilter = context.sourceFilter
+
+    const queryParams = {
+      vector: queryEmbedding.data[0].embedding,
+      minSimilarity,
+      limit: maxResults,
+      ...(sourceFilter && { filter: { source: sourceFilter } })
+    }
+
+    // Execute search against vector store
+    // Note: Implementation would depend on your vector store
+    const results = await this.searchVectorStore(queryParams)
+
+    return results.map(result => ({
+      id: result.id,
+      content: result.content,
+      metadata: result.metadata,
+      similarity: result.similarity,
+      coordinates4D: result.coordinates4D
+    }))
+  }
+
+  async coordinateQuery(coordinates: Coordinates4D): Promise<Document[]> {
+    // Implementation would depend on your coordinate-based search
+    return []
+  }
+
+  private async searchVectorStore(params: any): Promise<any[]> {
+    // Implementation would depend on your vector store
+    return []
+  }
 }
 
 const config: Config = {
@@ -59,7 +98,7 @@ const config: Config = {
 
 export async function POST(request: Request) {
   const { query, context } = await request.json()
-  const response = await processQuery(query, context as QueryContext)
+  const response = await processQuery(query, context)
   return NextResponse.json(response)
 }
 
@@ -73,13 +112,13 @@ async function processQuery(query: string, context: QueryContext): Promise<Query
   const relevantDocs = await retrieveRelevantDocuments(semanticResults, queryEngine)
 
   // Generate response using RAG
-  const ragResponse = await generateRagResponse(query, relevantDocs)
+  const response = await generateRagResponse(query, relevantDocs)
 
   return {
     query,
     semantic_results: semanticResults,
     relevant_documents: relevantDocs,
-    response: ragResponse
+    response
   }
 }
 
@@ -98,10 +137,7 @@ async function retrieveRelevantDocuments(
   return relevantDocs
 }
 
-async function generateRagResponse(
-  query: string,
-  relevantDocs: Document[]
-): Promise<string> {
+async function generateRagResponse(query: string, relevantDocs: Document[]): Promise<string> {
+  // Implementation would depend on your RAG response generation logic
   return `Generated response for query: ${query} with ${relevantDocs.length} documents`
 }
-/* eslint-enable @typescript-eslint/no-unused-vars */

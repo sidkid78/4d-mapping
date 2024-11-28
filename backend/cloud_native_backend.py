@@ -5,7 +5,7 @@ from fastapi import FastAPI, BackgroundTasks
 from celery import Celery
 from prometheus_client import Counter, Histogram, start_http_server
 import kubernetes
-from azure.monitor import MonitorClient
+from azure.monitor.ingestion import MetricsClient
 from azure.identity import DefaultAzureCredential
 from datetime import datetime 
 import logging
@@ -140,7 +140,7 @@ class MonitoringSystem:
     def __init__(self, config: Dict):
         self.config = config
         self.logger = logging.getLogger(__name__)
-        self.azure_monitor = MonitorClient(
+        self.azure_monitor = MetricsClient(
             credential=DefaultAzureCredential()
         )
         

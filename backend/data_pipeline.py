@@ -1,41 +1,18 @@
-from typing import Dict, List, Optional
-import yaml
-import re
-import logging
-from datetime import datetime
-import hashlib
-from azure.storage.blob import BlobServiceClient
-from azure.ai.formrecognizer import DocumentAnalysisClient
-from azure.search.documents import SearchClient
-from azure.core.credentials import AzureKeyCredential
-from space_mapper import SpaceMapper, Coordinates4D
+from typing import Dict, List
 import asyncio
+import aiohttp
+import logging
+from datetime import datetime, timedelta
+from space_mapper import SpaceMapper, Coordinates4D
 
 class DataPipeline:
     def __init__(self, config: Dict):
         self.config = config
         self.space_mapper = SpaceMapper(config)
-        
-        # Initialize Azure clients if credentials provided in config
-        if 'azure' in config:
-            azure_config = config['azure']
-            if 'blob' in azure_config:
-                self.blob_service = BlobServiceClient.from_connection_string(
-                    azure_config['blob']['connection_string']
-                )
-            if 'form_recognizer' in azure_config:
-                self.form_recognizer = DocumentAnalysisClient(
-                    endpoint=azure_config['form_recognizer']['endpoint'],
-                    credential=AzureKeyCredential(azure_config['form_recognizer']['key'])
-                )
-            if 'search' in azure_config:
-                self.search_client = SearchClient(
-                    endpoint=azure_config['search']['endpoint'],
-                    index_name="regulations",
-                    credential=AzureKeyCredential(azure_config['search']['key'])
-                )
-        
         self.logger = logging.getLogger(__name__)
+        self.federal_register_base_url = "https://www.federalregister.gov/api/v1"
+        self.regulations_gov_base_url = "https://api.regulations.gov/v4"
+        self.regulations_gov_api_key = config.get('regulations_gov_api_key')
 
     async def process_regulatory_data(self, raw_data: List[Dict]) -> List[Dict]:
         """
@@ -64,161 +41,164 @@ class DataPipeline:
         """
         Fetch data from various sources and process it.
         """
-        # Fetch data from different sources
         federal_register_data = await self.fetch_federal_register_data()
+        regulations_gov_data = await self.fetch_regulations_gov_data()
         clause_data = await self.fetch_clause_data()
         regulation_data = await self.fetch_regulation_data()
 
-        # Combine all data
-        all_data = federal_register_data + clause_data + regulation_data
+        all_data = federal_register_data + regulations_gov_data + clause_data + regulation_data
 
-        # Process the combined data
         processed_data = await self.process_regulatory_data(all_data)
 
         return processed_data
 
     async def fetch_federal_register_data(self) -> List[Dict]:
         """
-        Fetch data from Federal Register API.
+        Fetch regulatory documents from the Federal Register API.
+        Returns a list of documents with metadata.
         """
         try:
-            # TODO: Implement Federal Register API client
-            return []
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=30)
+            
+            async with aiohttp.ClientSession() as session:
+                query_params = {
+                    'conditions[publication_date][gte]': start_date.strftime('%Y-%m-%d'),
+                    'conditions[publication_date][lte]': end_date.strftime('%Y-%m-%d'),
+                    'conditions[type][]': ['RULE', 'PROPOSED_RULE', 'NOTICE'],
+                    'per_page': 100,
+                    'order': 'newest'
+                }
+                
+                url = f"{self.federal_register_base_url}/documents"
+                
+                async with session.get(url, params=query_params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        documents = []
+                        
+                        for doc in data.get('results', []):
+                            processed_doc = {
+                                'title': doc.get('title'),
+                                'document_number': doc.get('document_number'),
+                                'publication_date': doc.get('publication_date'),
+                                'document_type': doc.get('type'),
+                                'abstract': doc.get('abstract'),
+                                'agencies': [agency.get('name') for agency in doc.get('agencies', [])],
+                                'nuremberg_number': self._generate_nuremberg_number(doc),
+                                'url': doc.get('html_url')
+                            }
+                            documents.append(processed_doc)
+                            
+                        return documents
+                    else:
+                        self.logger.error(f"Federal Register API returned status {response.status}")
+                        return []
+                        
         except Exception as e:
             self.logger.error(f"Error fetching Federal Register data: {str(e)}")
             return []
 
     async def fetch_clause_data(self) -> List[Dict]:
         """
-        Fetch clause data from database.
+        Fetch regulatory clauses from the database.
+        Returns a list of clauses with metadata.
         """
         try:
-            # TODO: Implement clause database client
-            return []
+            async with aiohttp.ClientSession() as session:
+                url = f"{self.config['clause_api_url']}/clauses"
+                
+                params = {
+                    'status': 'active',
+                    'limit': 1000,
+                    'include_metadata': True
+                }
+                
+                async with session.get(url, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        clauses = []
+                        
+                        for clause in data.get('clauses', []):
+                            processed_clause = {
+                                'id': clause.get('id'),
+                                'title': clause.get('title'),
+                                'text': clause.get('text'),
+                                'category': clause.get('category'),
+                                'jurisdiction': clause.get('jurisdiction'),
+                                'effective_date': clause.get('effective_date'),
+                                'last_updated': clause.get('last_updated'),
+                                'dependencies': clause.get('dependencies', []),
+                                'metadata': clause.get('metadata', {}),
+                                'nuremberg_number': self._generate_nuremberg_number(clause)
+                            }
+                            clauses.append(processed_clause)
+                            
+                        return clauses
+                    else:
+                        self.logger.error(f"Clause API returned status {response.status}")
+                        return []
+                        
         except Exception as e:
             self.logger.error(f"Error fetching clause data: {str(e)}")
             return []
 
     async def fetch_regulation_data(self) -> List[Dict]:
-        """
-        Fetch regulation data from search index.
-        """
-        try:
-            if hasattr(self, 'search_client'):
-                results = self.search_client.search(search_text="*")
-                return [dict(result) for result in results]
-            return []
-        except Exception as e:
-            self.logger.error(f"Error fetching regulation data: {str(e)}")
-            return []
+        # TODO: Implement fetching regulation data
+        pass
 
-    def process_document(self, document_content: str, source_type: str) -> Dict:
+    async def fetch_regulations_gov_data(self) -> List[Dict]:
         """
-        Process incoming documents and generate metadata.
+        Fetch regulatory documents from the Regulations.gov API.
+        Returns a list of documents with metadata.
         """
         try:
-            # Clean and standardize content
-            cleaned_content = self._preprocess_document(document_content)
-            
-            # Extract metadata using Form Recognizer if available
-            metadata = self._extract_metadata(cleaned_content, source_type)
-            
-            # Generate identifiers
-            nuremberg_number = self._generate_nuremberg_number(metadata)
-            sam_tag = self._generate_sam_tag(metadata)
-            
-            # Create YAML structure
-            yaml_content = self._generate_yaml(
-                content=cleaned_content,
-                metadata=metadata,
-                nuremberg_number=nuremberg_number,
-                sam_tag=sam_tag
-            )
-            
-            # Validate and store
-            self._validate_data(yaml_content)
-            self._store_and_index(yaml_content)
-            
-            return yaml_content
+            if not self.regulations_gov_api_key:
+                self.logger.error("Regulations.gov API key not configured")
+                return []
 
-        except Exception as e:
-            self.logger.error(f"Error processing document: {str(e)}")
-            raise
-
-    def _preprocess_document(self, content: str) -> str:
-        """Clean and standardize document content."""
-        cleaned = re.sub(r'\s+', ' ', content)
-        cleaned = cleaned.strip()
-        cleaned = cleaned.replace('–', '-').replace('"', '"').replace('"', '"')
-        return cleaned
-
-    def _extract_metadata(self, content: str, source_type: str) -> Dict:
-        """Extract metadata using Form Recognizer if available."""
-        try:
-            if hasattr(self, 'form_recognizer'):
-                result = self.form_recognizer.begin_analyze_document(
-                    "prebuilt-document", content
-                ).result()
-                
-                return {
-                    "source_type": source_type,
-                    "extraction_date": datetime.utcnow().isoformat(),
-                    "document_type": result.doc_type,
-                    "confidence_score": result.confidence,
-                    "entities": self._extract_entities(result),
-                    "keywords": self._extract_keywords(content)
+            async with aiohttp.ClientSession() as session:
+                headers = {
+                    "X-Api-Key": self.regulations_gov_api_key,
+                    "Accept": "application/json"
                 }
-            
-            return {"source_type": source_type}
+
+                params = {
+                    "filter[postedDate][ge]": (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"),
+                    "filter[documentType]": "Notice,Rule,Proposed Rule",
+                    "page[size]": 50,
+                    "sort": "-postedDate"
+                }
+
+                url = f"{self.regulations_gov_base_url}/documents"
+
+                async with session.get(url, headers=headers, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        documents = []
+
+                        for doc in data.get('data', []):
+                            attributes = doc.get('attributes', {})
+                            processed_doc = {
+                                'title': attributes.get('title'),
+                                'document_number': doc.get('id'),
+                                'publication_date': attributes.get('postedDate'),
+                                'document_type': attributes.get('documentType'),
+                                'abstract': attributes.get('summary'),
+                                'agencies': [attributes.get('agencyName')] if attributes.get('agencyName') else [],
+                                'nuremberg_number': self._generate_nuremberg_number(attributes),
+                                'url': attributes.get('fileFormats', {}).get('pdf'),
+                                'docket_id': attributes.get('docketId'),
+                                'comment_count': attributes.get('commentCount'),
+                                'comment_end_date': attributes.get('commentEndDate')
+                            }
+                            documents.append(processed_doc)
+
+                        return documents
+                    else:
+                        self.logger.error(f"Regulations.gov API returned status {response.status}")
+                        return []
 
         except Exception as e:
-            self.logger.error(f"Metadata extraction failed: {str(e)}")
-            return {"source_type": source_type}
-
-    def _generate_yaml(self, content: str, metadata: Dict,
-                      nuremberg_number: str, sam_tag: str) -> Dict:
-        """Generate YAML structure for document."""
-        return {
-            "document_id": hashlib.sha256(content.encode()).hexdigest()[:12],
-            "nuremberg_number": nuremberg_number,
-            "sam_tag": sam_tag,
-            "metadata": metadata,
-            "content": content,
-            "processing_info": {
-                "processed_at": datetime.utcnow().isoformat(),
-                "pipeline_version": "1.0"
-            }
-        }
-
-    def _validate_data(self, yaml_content: Dict) -> None:
-        """Validate YAML content structure."""
-        required_fields = [
-            "document_id", "nuremberg_number", "sam_tag",
-            "metadata", "content"
-        ]
-        
-        for field in required_fields:
-            if field not in yaml_content:
-                raise ValueError(f"Missing required field: {field}")
-
-    def _store_and_index(self, yaml_content: Dict) -> None:
-        """Store in blob storage and index in search if available."""
-        try:
-            if hasattr(self, 'blob_service'):
-                container_client = self.blob_service.get_container_client("documents")
-                blob_name = f"{yaml_content['nuremberg_number']}.yaml"
-                yaml_str = yaml.dump(yaml_content, default_flow_style=False)
-                container_client.upload_blob(name=blob_name, data=yaml_str, overwrite=True)
-
-            if hasattr(self, 'search_client'):
-                self.search_client.upload_documents([{
-                    "id": yaml_content['document_id'],
-                    "nuremberg_number": yaml_content['nuremberg_number'],
-                    "sam_tag": yaml_content['sam_tag'],
-                    "content": yaml_content['content'],
-                    "metadata": str(yaml_content['metadata'])
-                }])
-
-        except Exception as e:
-            self.logger.error(f"Storage and indexing failed: {str(e)}")
-            raise
+            self.logger.error(f"Error fetching Regulations.gov data: {str(e)}")
+            return []

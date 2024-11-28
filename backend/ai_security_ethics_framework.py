@@ -11,6 +11,7 @@ from azure.security.keyvault.keys.crypto import CryptographyClient
 import tensorflow_federated as tff
 import tensorflow_privacy
 from mp_spdz.runtime import Runtime
+import tensorflow as tf
 
 @dataclass
 class SecurityContext:

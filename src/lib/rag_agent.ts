@@ -92,7 +92,14 @@ export class RAGAgent {
       const subQueries = await this.decompose_query(query);
       const documents = await this.retrieve_documents(subQueries);
       const rankedDocs = this.rank_documents(documents, userContext);
-      const context = await this.synthesize_context(rankedDocs);
+      const graphContext = await this.retrieve_graph_context(query);
+      const graphDoc: SearchDocument = {
+        id: 'graph-context',
+        content: graphContext,
+        metadata: {},
+        score: 1
+      };
+      const context = await this.synthesize_context([...rankedDocs, graphDoc]);
       const prompt = this.construct_prompt(query, context, userContext);
 
       const ragResult: RAGResult = {
@@ -185,5 +192,20 @@ ${context}
     });
 
     return response.choices[0]?.message?.content || "Unable to generate response";
+  }
+
+  private async retrieve_graph_context(query: string): Promise<string> {
+    const session = this.graphDb.session();
+    try {
+        const result = await session.executeRead(tx =>
+            tx.run(
+                'MATCH (n) WHERE n.content CONTAINS $query RETURN n.content',
+                { query }
+            )
+        );
+        return result.records.map(record => record.get('n.content')).join('\n');
+    } finally {
+        await session.close();
+    }
   }
 }

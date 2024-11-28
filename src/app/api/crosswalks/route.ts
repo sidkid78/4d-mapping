@@ -1,25 +1,4 @@
 import { NextResponse } from 'next/server'
-import { DatabaseManager } from '@/lib/database-manager'
-
-// Initialize the DatabaseManager with connection details
-const dbManager = new DatabaseManager(
-    {
-      host: process.env.POSTGRES_HOST || '',
-      port: parseInt(process.env.POSTGRES_PORT || '5432'),
-      database: process.env.POSTGRES_DB || '',
-      user: process.env.POSTGRES_USER || '',
-      password: process.env.POSTGRES_PASSWORD || '',
-    },
-    { 
-      uri: process.env.NEO4J_URI || '', 
-      username: process.env.NEO4J_USER || '', 
-      password: process.env.NEO4J_PASSWORD || '' 
-    },
-    // {
-    //   url: `redis://${process.env.REDIS_HOST || ''}:${process.env.REDIS_PORT || '6379'}`,
-    //   db: parseInt(process.env.REDIS_DB || '0')
-    // }
-)
 
 export async function POST(request: Request) {
   try {
@@ -29,9 +8,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    await dbManager.create_crosswalk(source_id, target_id, crosswalk_type)
+    const response = await fetch('http://localhost:8000/crosswalks', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ source_id, target_id, crosswalk_type }),
+    })
 
-    return NextResponse.json({ success: true, message: 'Crosswalk created successfully' })
+    if (!response.ok) {
+      throw new Error(`Failed to create crosswalk: ${response.statusText}`)
+    }
+
+    const result = await response.json()
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Error creating crosswalk:', error)
     return NextResponse.json({ error: 'Failed to create crosswalk' }, { status: 500 })
@@ -47,11 +37,15 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Missing regulation_id parameter' }, { status: 400 })
     }
 
-    const regulation = await dbManager.get_regulation_with_crosswalks(regulation_id)
+    const response = await fetch(`http://localhost:8000/regulations/${regulation_id}/crosswalks`)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch crosswalks: ${response.statusText}`)
+    }
 
-    return NextResponse.json(regulation)
+    const result = await response.json()
+    return NextResponse.json(result)
   } catch (error) {
-    console.error('Error fetching regulation with crosswalks:', error)
-    return NextResponse.json({ error: 'Failed to fetch regulation with crosswalks' }, { status: 500 })
+    console.error('Error fetching crosswalks:', error)
+    return NextResponse.json({ error: 'Failed to fetch crosswalks' }, { status: 500 })
   }
 }

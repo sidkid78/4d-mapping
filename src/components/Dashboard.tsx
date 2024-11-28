@@ -1,22 +1,69 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Camera, Settings, AlertCircle, Search, X } from 'lucide-react'
 import { LineChart, XAxis, YAxis, Tooltip, Line, ResponsiveContainer } from 'recharts'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
-import { MouseEvent as ReactMouseEvent } from 'react'
 
-interface NavItemProps {
-  icon: React.ReactNode
-  label: string
-  active?: boolean
-  onClick: () => void
+
+interface NodeDetailsProps {
+  node: any;
+  onClose: () => void;
 }
 
-const NavItem = ({ icon, label, active = false, onClick }: NavItemProps) => {
+interface Edge {
+  source: number;
+  target: number;
+}
+
+interface GraphData {
+  nodes: Node[];
+  edges: Edge[];
+}
+
+interface KnowledgeGraphViewerProps {
+  data: GraphData;
+  expertiseLevel: number;
+  onNodeSelect: (node: GraphData['nodes'][0]) => void;
+}
+
+interface UserData {
+  name: string;
+  role: string;
+}
+
+interface NavItemProps {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+}
+
+const NodeDetails: React.FC<NodeDetailsProps> = ({ node, onClose }) => {
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold">{node.title}</h3>
+        <Button variant="ghost" size="icon" onClick={onClose}>
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+      
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">Domain: {node.domain}</p>
+        <p className="text-sm text-muted-foreground">
+          Expertise Level: {node.expertiseLevel}
+        </p>
+        <p className="mt-4">{node.description}</p>
+      </div>
+    </div>
+  )
+}
+
+const NavItem: React.FC<NavItemProps> = ({ icon, label, active = false, onClick }) => {
   return (
     <Button
       variant="ghost"
@@ -41,41 +88,12 @@ const recentUpdates = [
   },
   {
     id: 2,
-    title: "DFARS Change Notice", 
+    title: "DFARS Change Notice",
     description: "Updated compliance requirements for defense contracts"
   }
 ]
 
-interface UserData {
-  name: string;
-  role: string;
-}
-
-interface KnowledgeGraphNode {
-  id: number;
-  title: string;
-  domain: string;
-  expertiseLevel: number;
-  description: string;
-}
-
-interface KnowledgeGraphData {
-  nodes: KnowledgeGraphNode[];
-  edges: { source: number; target: number; }[];
-}
-
-interface KnowledgeGraphViewerProps {
-  data: KnowledgeGraphData;
-  expertiseLevel: number;
-  onNodeSelect: (node: KnowledgeGraphNode) => void;
-}
-
-interface NodeDetailsProps {
-  node: KnowledgeGraphNode;
-  onClose: () => void;
-}
-
-const graphData: KnowledgeGraphData = {
+const graphData = {
   nodes: [
     { id: 1, title: "Cybersecurity", domain: "IT", expertiseLevel: 3, description: "Cybersecurity measures for federal contractors" },
     { id: 2, title: "Contract Compliance", domain: "Legal", expertiseLevel: 4, description: "Compliance requirements for defense contracts" },
@@ -93,13 +111,20 @@ const complianceData = [
   { date: '2023-05', complianceRate: 95 },
 ]
 
+interface Node {
+  id: number;
+  title: string;
+  domain: string;
+  expertiseLevel: number;
+  description: string;
+}
+
 export default function Dashboard() {
   const [userData, setUserData] = useState<UserData | null>(null)
-  const [selectedNode, setSelectedNode] = useState<KnowledgeGraphNode | null>(null)
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [expertiseLevel, setExpertiseLevel] = useState(1)
   const [activeNavItem, setActiveNavItem] = useState('explorer')
-  const [isCameraActive, setIsCameraActive] = useState(false)
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   
   useEffect(() => {
     const fetchUserData = async () => {
@@ -110,38 +135,81 @@ export default function Dashboard() {
     fetchUserData()
   }, [])
 
-  const handleCameraToggle = async () => {
-    if (!isCameraActive) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true })
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          setIsCameraActive(true)
-        }
-      } catch (err) {
-        console.error("Error accessing camera:", err)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw nodes
+    graphData.nodes.forEach((node, index) => {
+      const x = (index + 1) * (width / (graphData.nodes.length + 1))
+      const y = height / 2
+
+      ctx.beginPath()
+      ctx.arc(x, y, 20, 0, 2 * Math.PI)
+      ctx.fillStyle = node.expertiseLevel <= expertiseLevel ? 'hsl(var(--primary))' : 'hsl(var(--muted))'
+      ctx.fill()
+
+      ctx.fillStyle = 'hsl(var(--foreground))'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(node.title, x, y)
+    })
+
+    // Draw edges
+    ctx.strokeStyle = 'hsl(var(--muted-foreground))'
+    graphData.edges.forEach(edge => {
+      const sourceNode = graphData.nodes.find(node => node.id === edge.source)
+      const targetNode = graphData.nodes.find(node => node.id === edge.target)
+      if (!sourceNode || !targetNode) return;
+
+      const sourceIndex = graphData.nodes.indexOf(sourceNode)
+      const targetIndex = graphData.nodes.indexOf(targetNode)
+
+      const sourceX = (sourceIndex + 1) * (width / (graphData.nodes.length + 1))
+      const sourceY = height / 2
+      const targetX = (targetIndex + 1) * (width / (graphData.nodes.length + 1))
+      const targetY = height / 2
+
+
+      ctx.beginPath()
+      ctx.moveTo(sourceX, sourceY)
+      ctx.lineTo(targetX, targetY)
+      ctx.stroke()
+    })
+  }, [expertiseLevel])
+
+  const handleClick = useCallback((event: MouseEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    graphData.nodes.forEach((node, index) => {
+      const nodeX = (index + 1) * (canvas.width / (graphData.nodes.length + 1));
+      const nodeY = canvas.height / 2;
+
+      const distance = Math.sqrt((x - nodeX) ** 2 + (y - nodeY) ** 2);
+      if (distance <= 20) {
+        setSelectedNode(node);
       }
-    } else {
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        const tracks = stream.getTracks();
-        tracks.forEach((track: MediaStreamTrack) => track.stop());
-        videoRef.current.srcObject = null;
-      }
-      setIsCameraActive(false)
-    }
-  }
+    });
+  }, [graphData.nodes]);
 
   return (
     <div className="flex h-screen bg-background">
       <aside className="w-64 border-r">
         <div className="p-4">
-          {userData && (
-            <div className="mb-4 text-sm text-muted-foreground">
-              <p>Welcome, {userData.name}</p>
-              <p>Role: {userData.role}</p>
-            </div>
-          )}
           <h2 className="text-lg font-semibold">4D Knowledge Framework</h2>
           <div className="mt-4 space-y-2">
             <NavItem 
@@ -157,12 +225,6 @@ export default function Dashboard() {
               onClick={() => setActiveNavItem('compliance')}
             />
             <NavItem 
-              icon={<Camera className="w-4 h-4" />}
-              label="Camera"
-              active={isCameraActive}
-              onClick={handleCameraToggle}
-            />
-            <NavItem 
               icon={<Settings className="w-4 h-4" />} 
               label="Settings" 
               active={activeNavItem === 'settings'}
@@ -173,22 +235,6 @@ export default function Dashboard() {
       </aside>
 
       <main className="flex-1 overflow-auto p-6 space-y-6">
-        {isCameraActive && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Camera Feed</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                className="w-full rounded-lg"
-              />
-            </CardContent>
-          </Card>
-        )}
-
         <Card>
           <CardHeader>
             <CardTitle>Compliance Overview</CardTitle>
@@ -264,107 +310,62 @@ export default function Dashboard() {
 }
 
 const KnowledgeGraphViewer: React.FC<KnowledgeGraphViewerProps> = ({ data, expertiseLevel, onNodeSelect }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const handleNodeClick = useCallback((node: GraphData['nodes'][0]) => {
+    onNodeSelect(node);
+  }, [onNodeSelect]);
+
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    const width = canvas.width
-    const height = canvas.height
+    const width = canvas.width;
+    const height = canvas.height;
 
     // Clear canvas
-    ctx.clearRect(0, 0, width, height)
+    ctx.clearRect(0, 0, width, height);
 
     // Draw nodes
     data.nodes.forEach((node, index) => {
-      const x = (index + 1) * (width / (data.nodes.length + 1))
-      const y = height / 2
+      const x = (index + 1) * (width / (data.nodes.length + 1));
+      const y = height / 2;
 
-      ctx.beginPath()
-      ctx.arc(x, y, 20, 0, 2 * Math.PI)
-      ctx.fillStyle = node.expertiseLevel <= expertiseLevel ? 'hsl(var(--primary))' : 'hsl(var(--muted))'
-      ctx.fill()
+      ctx.beginPath();
+      ctx.arc(x, y, 20, 0, 2 * Math.PI);
+      ctx.fillStyle = node.expertiseLevel <= expertiseLevel ? 'hsl(var(--primary))' : 'hsl(var(--muted))';
+      ctx.fill();
 
-      ctx.fillStyle = 'hsl(var(--foreground))'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(node.title, x, y)
-    })
+      ctx.fillStyle = 'hsl(var(--foreground))';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(node.title, x, y);
+    });
 
     // Draw edges
-    ctx.strokeStyle = 'hsl(var(--muted-foreground))'
+    ctx.strokeStyle = 'hsl(var(--muted-foreground))';
     data.edges.forEach(edge => {
-      const sourceNode = data.nodes.find(node => node.id === edge.source)
-      const targetNode = data.nodes.find(node => node.id === edge.target)
-      
+      const sourceNode = data.nodes.find(node => node.id === edge.source);
+      const targetNode = data.nodes.find(node => node.id === edge.target);
       if (!sourceNode || !targetNode) return;
-      
-      const sourceIndex = data.nodes.indexOf(sourceNode)
-      const targetIndex = data.nodes.indexOf(targetNode)
 
-      const sourceX = (sourceIndex + 1) * (width / (data.nodes.length + 1))
-      const sourceY = height / 2
-      const targetX = (targetIndex + 1) * (width / (data.nodes.length + 1))
-      const targetY = height / 2
+      const sourceIndex = data.nodes.indexOf(sourceNode);
+      const targetIndex = data.nodes.indexOf(targetNode);
 
-      ctx.beginPath()
-      ctx.moveTo(sourceX, sourceY)
-      ctx.lineTo(targetX, targetY)
-      ctx.stroke()
-    })
-  }, [data, expertiseLevel])
+      const sourceX = (sourceIndex + 1) * (width / (data.nodes.length + 1));
+      const sourceY = height / 2;
+      const targetX = (targetIndex + 1) * (width / (data.nodes.length + 1));
+      const targetY = height / 2;
 
-  const handleClick = (event: ReactMouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+      ctx.beginPath();
+      ctx.moveTo(sourceX, sourceY);
+      ctx.lineTo(targetX, targetY);
+      ctx.stroke();
+    });
+  }, [data, expertiseLevel]);
 
-    const rect = canvas.getBoundingClientRect()
-    const x = event.clientX - rect.left
-    const y = event.clientY - rect.top
-
-    data.nodes.forEach((node, index) => {
-      const nodeX = (index + 1) * (canvas.width / (data.nodes.length + 1))
-      const nodeY = canvas.height / 2
-
-      const distance = Math.sqrt((x - nodeX) ** 2 + (y - nodeY) ** 2)
-      if (distance <= 20) {
-        onNodeSelect(node)
-      }
-    })
-  }
-
-  return (
-    <canvas
-      ref={canvasRef}
-      width={800}
-      height={400}
-      onClick={handleClick}
-      className="w-full h-64 border rounded"
-    />
-  )
-}
-
-const NodeDetails: React.FC<NodeDetailsProps> = ({ node, onClose }) => {
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">{node.title}</h3>
-        <Button variant="ghost" size="icon" onClick={onClose}>
-          <X className="w-4 h-4" />
-        </Button>
-      </div>
-      
-      <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">Domain: {node.domain}</p>
-        <p className="text-sm text-muted-foreground">
-          Expertise Level: {node.expertiseLevel}
-        </p>
-        <p className="mt-4">{node.description}</p>
-      </div>
-    </div>
-  )
-}
+  return <canvas ref={canvasRef} className="w-full h-full" />;
+};

@@ -13,9 +13,9 @@ export const AoT_CONFIG: AoTConfig = {
     neo4j_user: process.env.NEO4J_USER,
     neo4j_password: process.env.NEO4J_PASSWORD,
     azure_openai_endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-    azure_openai_deployment_name: 'gpt-4',
+    azure_openai_deployment_name: 'gpt-40',
     azure_openai_api_version: '2024-08-01-preview',
-    key_vault_url: process.env.KEY_VAULT_URL,
-    azure_openai_secret_name: process.env.AZURE_OPENAI_KEY
+    // key_vault_url: process.env.KEY_VAULT_URL,
+    azure_openai_secret_name: process.env.AZURE_OPENAI_API_KEY
   }
 }; 
