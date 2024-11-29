@@ -1,34 +1,29 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
-import { MainNav } from "@/components/main-nav"
+import { Header } from '@/components/header'
+import { Footer } from '@/components/footer'
 import './globals.css'
-import { Toaster } from "@/components/ui/toaster"
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Procurity.ai - Advanced Orchestrator',
-  description: 'Advanced system orchestration and management platform',
+  description: 'Advanced system orchestration and management platform'
 }
 
-export default function RootLayout({
-  children,
-}: {
+interface RootLayoutProps {
   children: React.ReactNode
-}) {
+}
+
+export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <div className="border-b">
-          <div className="flex h-16 items-center px-4">
-            <MainNav />
-            <div className="ml-auto flex items-center space-x-4">
-              {/* <UserNav /> */}
-            </div>
-          </div>
-        </div>
-        {children}
-        <Toaster />
+      <body className={`${inter.className} min-h-screen flex flex-col`}>
+        <Header />
+        <main className="flex-1 bg-gradient-to-b from-[#E0F7FA] to-[#F0F0F0]">
+          {children}
+        </main>
+        <Footer />
       </body>
     </html>
   )

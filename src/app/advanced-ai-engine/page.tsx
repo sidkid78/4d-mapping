@@ -9,14 +9,35 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
 import dynamic from 'next/dynamic'
+import type { ExplanationNode } from '@/lib/advanced_ai_engine'
 
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false })
+
+interface Visualization {
+  title: string;
+  figure: {
+    data: any[];
+    layout: Record<string, any>;
+  };
+}
+
+interface AIResponse {
+  response: {
+    content: string;
+    confidence_score: number;
+    persona_contributions: Record<string, number>;
+    evidence: Array<Record<string, any>>;
+    visualizations?: Visualization[];
+  };
+  explanationTree: ExplanationNode;
+  confidenceScore: number;
+}
 
 export default function AdvancedAIEnginePage() {
   const [query, setQuery] = useState('')
   const [expertiseLevel, setExpertiseLevel] = useState('intermediate')
   const [loading, setLoading] = useState(false)
-  const [response, setResponse] = useState<any>(null)
+  const [response, setResponse] = useState<AIResponse | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -67,7 +88,7 @@ export default function AdvancedAIEnginePage() {
         </Button>
       </form>
 
-      {response && (
+      {response && response.response && (
         <Card className="mb-8">
           <CardHeader>
             <CardTitle>Response</CardTitle>
@@ -83,19 +104,21 @@ export default function AdvancedAIEnginePage() {
               <TabsContent value="content">
                 <div className="prose max-w-none">
                   <h3>Analysis</h3>
-                  <p>{response.response.content}</p>
+                  <p>{response?.response?.content || 'No content available'}</p>
                   <h3>Confidence Score</h3>
-                  <p>{response.confidence_score.toFixed(2)}</p>
+                  <p>{(response?.confidenceScore || 0).toFixed(2)}</p>
                   <h3>Persona Contributions</h3>
                   <ul>
-                    {Object.entries(response.response.persona_contributions).map(([persona, weight]) => (
-                      <li key={persona}>{persona}: {(weight as number).toFixed(2)}</li>
+                    {(Object.entries(response?.response?.persona_contributions || {}) as [string, number][]).map(([persona, weight]) => (
+                      <li key={persona}>
+                        {persona}: {(weight * 100).toFixed(1)}%
+                      </li>
                     ))}
                   </ul>
                 </div>
               </TabsContent>
               <TabsContent value="visualizations">
-                {response.response.visualizations.map((viz: any, index: number) => (
+                {response?.response.visualizations?.map((viz: Visualization, index: number) => (
                   <div key={index} className="mb-4">
                     <h3 className="text-lg font-semibold mb-2">{viz.title}</h3>
                     <Plot
@@ -108,7 +131,7 @@ export default function AdvancedAIEnginePage() {
                 ))}
               </TabsContent>
               <TabsContent value="explanation">
-                <ExplanationTree node={response.explanation_tree} />
+                <ExplanationTree node={response.explanationTree} />
               </TabsContent>
             </Tabs>
           </CardContent>
@@ -118,7 +141,13 @@ export default function AdvancedAIEnginePage() {
   )
 }
 
-function ExplanationTree({ node }: { node: any }) {
+// Update the ExplanationTree component
+function ExplanationTree({ node }: { node: ExplanationNode }) {
+  if (!node) return null;
+
+  // Only use subSteps since that's the property in ExplanationNode type
+  const steps = Array.isArray(node.subSteps) ? node.subSteps : [];
+
   return (
     <div className="ml-4">
       <div className="flex items-center">
@@ -130,24 +159,26 @@ function ExplanationTree({ node }: { node: any }) {
         <strong>{node.step}</strong>
       </div>
       <p className="ml-6">{node.reasoning}</p>
-      <p className="ml-6 text-sm text-gray-500">Confidence: {node.confidence.toFixed(2)}</p>
-      {node.evidence.length > 0 && (
+      <p className="ml-6 text-sm text-gray-500">
+        Confidence: {node.confidence.toFixed(2)}
+      </p>
+      {node.evidence?.length > 0 && (
         <div className="ml-6">
           <strong>Evidence:</strong>
           <ul className="list-disc list-inside">
-            {node.evidence.map((ev: any, index: number) => (
+            {node.evidence.map((ev: { content: string }, index: number) => (
               <li key={index}>{ev.content}</li>
             ))}
           </ul>
         </div>
       )}
-      {node.sub_steps.length > 0 && (
+      {steps.length > 0 && (
         <div className="ml-6">
-          {node.sub_steps.map((subStep: any, index: number) => (
+          {steps.map((subStep, index) => (
             <ExplanationTree key={index} node={subStep} />
           ))}
         </div>
       )}
     </div>
-  )
+  );
 }

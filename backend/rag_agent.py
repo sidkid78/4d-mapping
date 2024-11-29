@@ -1,138 +1,156 @@
-from typing import Dict, List
-import asyncio
-from space_mapper import SpaceMapper, Coordinates4D
-from query_engine import QueryEngine
-from openai import embeddings 
+from typing import Dict, List, Optional
+from azure.search.documents import SearchClient
+from azure.core.credentials import AzureKeyCredential
+from openai import AzureOpenAI
+import numpy as np
+from .model_types import Coordinates4D, SearchDocument
+from .advanced_ai_engine import AdvancedAIEngine
 
 class RAGAgent:
-    """
-    A Retrieval-Augmented Generation (RAG) agent that processes queries using 4D space mapping and semantic search.
+    def __init__(self, config: Dict[str, str]):
+        self.search_client = SearchClient(
+            endpoint=config["search_endpoint"],
+            index_name="documents",
+            credential=AzureKeyCredential(config["search_key"])
+        )
+        
+        self.openai = AzureOpenAI(
+            api_key=config["openai_key"],
+            api_version="2024-02-15-preview",
+            azure_endpoint=config["openai_endpoint"]
+        )
+        
+        self.deployment_name = config["deployment_name"]
+        
+        # Initialize Advanced AI Engine
+        self.advanced_engine = AdvancedAIEngine(config)
 
-    This agent combines semantic search, 4D coordinate mapping, and document retrieval to provide
-    context-aware responses to queries. It uses Azure OpenAI embeddings and a custom query engine.
+    async def process_query(self, query: str, expertise_level: int) -> Dict:
+        # Get embeddings and basic search results
+        embedding_response = await self.openai.embeddings.create(
+            model="text-embedding-3-small",
+            input=query
+        )
+        query_embedding = embedding_response.data[0].embedding
 
-    Attributes:
-        config (Dict): Configuration dictionary containing Azure and model settings
-        space_mapper (SpaceMapper): Component for mapping content to 4D coordinates
-        query_engine (QueryEngine): Component for processing semantic and coordinate-based queries
+        # Get advanced analysis
+        advanced_results = await self.advanced_engine.analyze(
+            query=query,
+            expertise_level=expertise_level,
+            embeddings=query_embedding
+        )
 
-    Example:
-        ```python
-        config = {
-            'azure_endpoint': 'https://...',
-            'azure_deployment': 'deployment-name'
-        }
-        agent = RAGAgent(config)
-        result = await agent.process_query("What are the cybersecurity requirements?", context)
-        ```
-    """
+        # Combine with semantic search
+        search_results = await self.search_client.search(
+            search_text=query,
+            select=["id", "content", "metadata", "coordinates", "_score"],
+            query_type="semantic",
+            semantic_configuration_name="default",
+            top=5
+        )
 
-    def __init__(self, config: Dict):
-        """
-        Initialize the RAG agent with configuration settings.
+        documents = [doc for doc in search_results]
 
-        Args:
-            config (Dict): Configuration dictionary containing Azure endpoints and model settings
-        """
-        self.config = config
-        self.space_mapper = SpaceMapper(config)
-        self.query_engine = QueryEngine(config)
-
-    async def process_query(self, query: str, context: Dict) -> Dict:
-        """
-        Process a query using 4D space mapping and RAG techniques.
-
-        Args:
-            query (str): The user's query text
-            context (Dict): Additional context for query processing
-
-        Returns:
-            Dict: Results containing:
-                - query: Original query text
-                - semantic_results: Results from semantic search
-                - relevant_documents: Retrieved relevant documents
-                - response: Generated RAG response
-
-        Raises:
-            Exception: If embedding generation or query processing fails
-        """
-        # Generate query embedding
-        query_embedding = await self.generate_embedding(query)
-
-        # Perform semantic search in 4D space
-        semantic_results = await self.query_engine.semantic_query(query, context)
-
-        # Retrieve relevant documents based on 4D coordinates
-        relevant_docs = await self.retrieve_relevant_documents(semantic_results)
-
-        # Generate response using RAG
-        response = await self.generate_rag_response(query, relevant_docs)
+        # Generate visualization data with advanced insights
+        visualization_data = self._generate_visualization(
+            documents, 
+            query_embedding,
+            advanced_results.get('insights', {})
+        )
 
         return {
-            'query': query,
-            'semantic_results': semantic_results,
-            'relevant_documents': relevant_docs,
-            'response': response
+            "query": query,
+            "semantic_results": [{
+                "id": doc["id"],
+                "content": doc["content"],
+                "coordinates": doc["coordinates"],
+                "relevance_score": doc.get("_score", 0)
+            } for doc in documents],
+            "visualization_data": visualization_data,
+            "explanation_tree": advanced_results.get('explanation_tree', {}),
+            "response": advanced_results.get('response', '')
         }
 
-    async def generate_embedding(self, text: str) -> List[float]:
+    def _construct_prompt(self, query: str, documents: List[Dict]) -> str:
+        return f"""
+        Query: {query}
+
+        Context:
+        {chr(10).join(doc["content"] for doc in documents)}
+
+        Please provide a detailed response based on the above context.
         """
-        Generate embeddings for input text using Azure OpenAI.
 
-        Args:
-            text (str): Input text to embed
-
-        Returns:
-            List[float]: Vector embedding of the input text
-
-        Raises:
-            Exception: If embedding generation fails
-        """
-        embedding = OpenAIEmbeddings(
-            model="text-embedding-3-small",
-            azure_endpoint=self.config['azure_endpoint'],
-            azure_deployment=self.config['azure_deployment']
-        )
-        return embedding.get_text_embedding(text)
-
-    async def retrieve_relevant_documents(self, semantic_results: List[Dict]) -> List[Dict]:
-        """
-        Retrieve documents based on semantic search results and 4D coordinates.
-
-        Args:
-            semantic_results (List[Dict]): Results from semantic search containing 4D coordinates
-
-        Returns:
-            List[Dict]: List of relevant documents with their metadata
-
-        Raises:
-            Exception: If document retrieval fails
-        """
-        relevant_docs = []
-        for result in semantic_results:
-            coordinates = Coordinates4D(
-                x=result['4d_coordinates']['x'],
-                y=result['4d_coordinates']['y'],
-                z=result['4d_coordinates']['z'],
-                e=result['4d_coordinates']['e']
+    def _generate_visualization(self, documents: List[Dict], query_embedding: List[float], advanced_insights: Dict) -> Dict:
+        nodes = [{
+            "id": doc["id"],
+            "coordinates": doc["coordinates"],
+            "category": doc["metadata"].get("category", "unknown"),
+            "relevance": self._calculate_relevance(
+                doc.get("embedding", []), 
+                query_embedding
             )
-            docs = await self.query_engine.coordinate_query(coordinates)
-            relevant_docs.extend(docs)
-        return relevant_docs
+        } for doc in documents]
 
-    async def generate_rag_response(self, query: str, relevant_docs: List[Dict]) -> str:
-        """
-        Generate a response using retrieved documents and RAG techniques.
+        edges = self._generate_edges(nodes)
+        heatmap = self._generate_heatmap(documents)
 
-        Args:
-            query (str): Original query text
-            relevant_docs (List[Dict]): Retrieved relevant documents
+        return {
+            "space_mapping": {"nodes": nodes, "edges": edges},
+            "heatmap_data": heatmap,
+            "advanced_insights": advanced_insights
+        }
 
-        Returns:
-            str: Generated response incorporating document context
+    def _calculate_relevance(self, v1: List[float], v2: List[float]) -> float:
+        if not v1 or not v2:
+            return 0.0
+        return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
 
-        Raises:
-            Exception: If RAG response generation fails
-        """
-        rag_response = await self.query_engine.rag_query(query, relevant_docs)
-        return rag_response
+    def _generate_edges(self, nodes: List[Dict]) -> List[Dict]:
+        edges = []
+        for i, node in enumerate(nodes):
+            for other in nodes[i+1:]:
+                edges.append({
+                    "source": node["id"],
+                    "target": other["id"],
+                    "weight": self._calculate_similarity(
+                        node["coordinates"],
+                        other["coordinates"]
+                    )
+                })
+        return edges
+
+    def _generate_heatmap(self, documents: List[Dict]) -> Dict:
+        categories = list(set(doc["metadata"].get("category") for doc in documents))
+        requirements = list(set(doc["metadata"].get("requirement") for doc in documents))
+        
+        matrix = []
+        for req in requirements:
+            row = []
+            for cat in categories:
+                relevant_docs = [
+                    doc for doc in documents 
+                    if doc["metadata"].get("category") == cat and 
+                       doc["metadata"].get("requirement") == req
+                ]
+                row.append(max((doc.get("_score", 0) for doc in relevant_docs), default=0))
+            matrix.append(row)
+            
+        return {
+            "matrix": matrix,
+            "categories": categories,
+            "requirements": requirements
+        }
+
+    def _generate_explanation_tree(self, query: str, documents: List[Dict]) -> Dict:
+        return {
+            "step": "Query Analysis",
+            "reasoning": f"Analyzing query: {query}",
+            "confidence": 0.9,
+            "evidence": [{
+                "content": doc["content"][:200],
+                "source": doc["id"],
+                "relevance": doc.get("_score", 0)
+            } for doc in documents[:3]],
+            "subSteps": []
+        }

@@ -157,7 +157,7 @@ Answer:"""
 
         # Generate response using Azure OpenAI
         response = await self.client.chat.completions.create(
-            model=self.config['gpt_model'],
+            model=self.config['gpt-4o'],
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that answers questions based on provided documents."},
                 {"role": "user", "content": prompt}

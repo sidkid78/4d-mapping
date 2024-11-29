@@ -1,51 +1,46 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { DatabaseManager } from '@/lib/database-manager'
+import { validateRequest } from '@/lib/api_utils'
 
-export async function POST(request: Request) {
-  try {
-    const { source_id, target_id, crosswalk_type } = await request.json()
-
-    if (!source_id || !target_id || !crosswalk_type) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-    }
-
-    const response = await fetch('http://localhost:8000/crosswalks', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ source_id, target_id, crosswalk_type }),
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to create crosswalk: ${response.statusText}`)
-    }
-
-    const result = await response.json()
-    return NextResponse.json(result)
-  } catch (error) {
-    console.error('Error creating crosswalk:', error)
-    return NextResponse.json({ error: 'Failed to create crosswalk' }, { status: 500 })
-  }
+interface CrosswalkRequest {
+  sourceId: string
+  targetId: string 
+  crosswalkType: string
 }
 
-export async function GET(request: Request) {
+const dbManager = new DatabaseManager({
+  host: process.env.BACKEND_URL || 'http://localhost:8000',
+  port: 5432,
+  database: process.env.DATABASE_NAME || 'procurity',
+  user: process.env.API_KEY!,
+  password: process.env.DATABASE_PASSWORD!
+}, 
+process.env.API_KEY!,
+'v1')
+
+export async function POST(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const regulation_id = searchParams.get('regulation_id')
+    const body = await request.json()
+    const { isValid, errorMessage } = validateRequest(body, ['sourceId', 'targetId', 'crosswalkType'])
 
-    if (!regulation_id) {
-      return NextResponse.json({ error: 'Missing regulation_id parameter' }, { status: 400 })
+    if (!isValid) {
+      return NextResponse.json({ error: errorMessage }, { status: 400 })
     }
 
-    const response = await fetch(`http://localhost:8000/regulations/${regulation_id}/crosswalks`)
-    if (!response.ok) {
-      throw new Error(`Failed to fetch crosswalks: ${response.statusText}`)
-    }
+    const { sourceId, targetId, crosswalkType }: CrosswalkRequest = body
 
-    const result = await response.json()
-    return NextResponse.json(result)
+    await dbManager.createCrosswalk(sourceId, targetId, crosswalkType)
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Crosswalk created successfully'
+    })
+
   } catch (error) {
-    console.error('Error fetching crosswalks:', error)
-    return NextResponse.json({ error: 'Failed to fetch crosswalks' }, { status: 500 })
+    console.error('Failed to create crosswalk:', error)
+    return NextResponse.json(
+      { error: 'Failed to create crosswalk' }, 
+      { status: 500 }
+    )
   }
 }

@@ -1,0 +1,21 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_PRISMA_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Regulation {
+  id             Int      @id @default(autoincrement())
+  documentNumber String   @unique
+  title          String
+  publicationDate DateTime
+  agencyNames    String[]
+  abstract       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([documentNumber])
+}

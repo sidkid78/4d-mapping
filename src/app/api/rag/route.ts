@@ -13,11 +13,25 @@ const config = {
   azure_openai_deployment_name: process.env.AZURE_OPENAI_DEPLOYMENT_NAME,
   azure_openai_api_version: process.env.AZURE_OPENAI_API_VERSION,
   // key_vault_url: process.env.KEY_VAULT_URL,
-  // azure_openai_secret_name: process.env.AZURE_OPENAI_SECRET_NAME,
+  azure_openai_secret_name: process.env.AZURE_OPENAI_SECRET_NAME,
   // keyvault_url: process.env.KEY_VAULT_URL,
 }
 
-const ragAgent = new RAGAgent(config)
+const ragAgent = new RAGAgent({
+  azure_endpoint: process.env.AZURE_OPENAI_ENDPOINT!,
+  azure_deployment: process.env.AZURE_OPENAI_DEPLOYMENT_NAME!,
+  search_endpoint: process.env.AZURE_SEARCH_ENDPOINT!,
+  search_key: process.env.AZURE_SEARCH_KEY!
+});
+
+// Add validation
+if (!process.env.AZURE_OPENAI_ENDPOINT || 
+    !process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 
+    !process.env.AZURE_SEARCH_ENDPOINT || 
+    !process.env.AZURE_SEARCH_KEY) {
+  throw new Error('Missing required environment variables');
+}
+
 // const securityFramework = new SecurityFramework(config)
 // const ethicalAI = new EthicalAI(config)
 

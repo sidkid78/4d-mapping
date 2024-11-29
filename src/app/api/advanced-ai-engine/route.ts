@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { AdvancedAIEngine } from '@/lib/advanced_ai_engine'
 import { validateRequest } from '@/lib/api_utils'
 
-const aiEngine = new AdvancedAIEngine({   
-  // Add any necessary configuration here
+const aiEngine = new AdvancedAIEngine({
+  azure_openai_secret_name: process.env.AZURE_OPENAI_SECRET_NAME,
+  azure_openai_api_key: process.env.AZURE_OPENAI_API_KEY,
+  confidenceThreshold: 0.7
 })
 
 export async function POST(req: NextRequest) {
@@ -17,7 +19,10 @@ export async function POST(req: NextRequest) {
 
     const { query, expertiseLevel } = body
 
-    const result = await aiEngine.processAdvancedQuery(query, { expertise_level: expertiseLevel })
+    const result = await aiEngine.processAdvancedQuery(query, {
+      expertiseLevel,
+      timestamp: new Date().toISOString()
+    })
 
     return NextResponse.json(result)
   } catch (error) {

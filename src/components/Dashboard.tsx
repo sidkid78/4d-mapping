@@ -1,69 +1,22 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Camera, Settings, AlertCircle, Search, X } from 'lucide-react'
+import { Camera, Settings, AlertCircle, Search, X, ExternalLink } from 'lucide-react'
 import { LineChart, XAxis, YAxis, Tooltip, Line, ResponsiveContainer } from 'recharts'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
-
-
-interface NodeDetailsProps {
-  node: any;
-  onClose: () => void;
-}
-
-interface Edge {
-  source: number;
-  target: number;
-}
-
-interface GraphData {
-  nodes: Node[];
-  edges: Edge[];
-}
-
-interface KnowledgeGraphViewerProps {
-  data: GraphData;
-  expertiseLevel: number;
-  onNodeSelect: (node: GraphData['nodes'][0]) => void;
-}
-
-interface UserData {
-  name: string;
-  role: string;
-}
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface NavItemProps {
-  icon: React.ReactNode;
-  label: string;
-  active?: boolean;
-  onClick: () => void;
+  icon: React.ReactNode
+  label: string
+  active?: boolean
+  onClick: () => void
 }
 
-const NodeDetails: React.FC<NodeDetailsProps> = ({ node, onClose }) => {
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">{node.title}</h3>
-        <Button variant="ghost" size="icon" onClick={onClose}>
-          <X className="w-4 h-4" />
-        </Button>
-      </div>
-      
-      <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">Domain: {node.domain}</p>
-        <p className="text-sm text-muted-foreground">
-          Expertise Level: {node.expertiseLevel}
-        </p>
-        <p className="mt-4">{node.description}</p>
-      </div>
-    </div>
-  )
-}
-
-const NavItem: React.FC<NavItemProps> = ({ icon, label, active = false, onClick }) => {
+const NavItem = ({ icon, label, active = false, onClick }: NavItemProps) => {
   return (
     <Button
       variant="ghost"
@@ -80,51 +33,59 @@ const NavItem: React.FC<NavItemProps> = ({ icon, label, active = false, onClick 
   )
 }
 
-const recentUpdates = [
-  {
-    id: 1,
-    title: "FAR Update 2024-01",
-    description: "New cybersecurity requirements for federal contractors"
-  },
-  {
-    id: 2,
-    title: "DFARS Change Notice",
-    description: "Updated compliance requirements for defense contracts"
-  }
-]
-
-const graphData = {
-  nodes: [
-    { id: 1, title: "Cybersecurity", domain: "IT", expertiseLevel: 3, description: "Cybersecurity measures for federal contractors" },
-    { id: 2, title: "Contract Compliance", domain: "Legal", expertiseLevel: 4, description: "Compliance requirements for defense contracts" },
-  ],
-  edges: [
-    { source: 1, target: 2 }
-  ]
+interface FederalRegisterEntry {
+  id: string
+  title: string
+  abstract: string
+  document_number: string
+  html_url: string
+  publication_date: string
+  type: string
+  agency_names: string[]
 }
 
-const complianceData = [
-  { date: '2023-01', complianceRate: 85 },
-  { date: '2023-02', complianceRate: 88 },
-  { date: '2023-03', complianceRate: 92 },
-  { date: '2023-04', complianceRate: 90 },
-  { date: '2023-05', complianceRate: 95 },
-]
+interface UserData {
+  name: string
+  role: string
+}
 
-interface Node {
-  id: number;
-  title: string;
-  domain: string;
-  expertiseLevel: number;
-  description: string;
+interface GraphNode {
+  id: number
+  title: string
+  domain: string
+  expertiseLevel: number
+  description: string
+}
+
+interface GraphEdge {
+  source: number
+  target: number
+}
+
+interface GraphData {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
+
+interface KnowledgeGraphViewerProps {
+  data: GraphData
+  expertiseLevel: number
+  onNodeSelect: (node: GraphNode) => void
+}
+
+interface NodeDetailsProps {
+  node: GraphNode
+  onClose: () => void
 }
 
 export default function Dashboard() {
   const [userData, setUserData] = useState<UserData | null>(null)
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null)
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [expertiseLevel, setExpertiseLevel] = useState(1)
   const [activeNavItem, setActiveNavItem] = useState('explorer')
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [recentUpdates, setRecentUpdates] = useState<FederalRegisterEntry[]>([])
+  const [isLoadingUpdates, setIsLoadingUpdates] = useState(true)
+  const [updateError, setUpdateError] = useState<string | null>(null)
   
   useEffect(() => {
     const fetchUserData = async () => {
@@ -136,75 +97,50 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const width = canvas.width;
-    const height = canvas.height;
-
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-
-    // Draw nodes
-    graphData.nodes.forEach((node, index) => {
-      const x = (index + 1) * (width / (graphData.nodes.length + 1))
-      const y = height / 2
-
-      ctx.beginPath()
-      ctx.arc(x, y, 20, 0, 2 * Math.PI)
-      ctx.fillStyle = node.expertiseLevel <= expertiseLevel ? 'hsl(var(--primary))' : 'hsl(var(--muted))'
-      ctx.fill()
-
-      ctx.fillStyle = 'hsl(var(--foreground))'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(node.title, x, y)
-    })
-
-    // Draw edges
-    ctx.strokeStyle = 'hsl(var(--muted-foreground))'
-    graphData.edges.forEach(edge => {
-      const sourceNode = graphData.nodes.find(node => node.id === edge.source)
-      const targetNode = graphData.nodes.find(node => node.id === edge.target)
-      if (!sourceNode || !targetNode) return;
-
-      const sourceIndex = graphData.nodes.indexOf(sourceNode)
-      const targetIndex = graphData.nodes.indexOf(targetNode)
-
-      const sourceX = (sourceIndex + 1) * (width / (graphData.nodes.length + 1))
-      const sourceY = height / 2
-      const targetX = (targetIndex + 1) * (width / (graphData.nodes.length + 1))
-      const targetY = height / 2
-
-
-      ctx.beginPath()
-      ctx.moveTo(sourceX, sourceY)
-      ctx.lineTo(targetX, targetY)
-      ctx.stroke()
-    })
-  }, [expertiseLevel])
-
-  const handleClick = useCallback((event: MouseEvent) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-
-    graphData.nodes.forEach((node, index) => {
-      const nodeX = (index + 1) * (canvas.width / (graphData.nodes.length + 1));
-      const nodeY = canvas.height / 2;
-
-      const distance = Math.sqrt((x - nodeX) ** 2 + (y - nodeY) ** 2);
-      if (distance <= 20) {
-        setSelectedNode(node);
+    const fetchRecentUpdates = async () => {
+      setIsLoadingUpdates(true)
+      setUpdateError(null)
+      try {
+        const response = await fetch('/api/federal-register/recent')
+        if (!response.ok) {
+          throw new Error('Failed to fetch updates')
+        }
+        const data = await response.json()
+        setRecentUpdates(data.results || [])
+      } catch (error) {
+        console.error('Error fetching recent updates:', error)
+        setUpdateError('Failed to load regulatory updates')
+        setRecentUpdates([])
+      } finally {
+        setIsLoadingUpdates(false)
       }
-    });
-  }, [graphData.nodes]);
+    }
+
+    fetchRecentUpdates()
+  }, [])
+
+  interface ComplianceDataPoint {
+    date: string
+    complianceRate: number
+  }
+
+  const complianceData: ComplianceDataPoint[] = [
+    { date: '2023-01', complianceRate: 85 },
+    { date: '2023-02', complianceRate: 88 },
+    { date: '2023-03', complianceRate: 92 },
+    { date: '2023-04', complianceRate: 90 },
+    { date: '2023-05', complianceRate: 95 },
+  ]
+
+  const graphData: GraphData = {
+    nodes: [
+      { id: 1, title: "Cybersecurity", domain: "IT", expertiseLevel: 3, description: "Cybersecurity measures for federal contractors" },
+      { id: 2, title: "Contract Compliance", domain: "Legal", expertiseLevel: 4, description: "Compliance requirements for defense contracts" },
+    ],
+    edges: [
+      { source: 1, target: 2 }
+    ]
+  }
 
   return (
     <div className="flex h-screen bg-background">
@@ -264,12 +200,68 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentUpdates.map((update) => (
-                <Alert key={update.id}>
-                  <AlertTitle>{update.title}</AlertTitle>
-                  <AlertDescription>{update.description}</AlertDescription>
+              {isLoadingUpdates ? (
+                // Loading skeleton
+                Array(3).fill(0).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-full" />
+                  </div>
+                ))
+              ) : updateError ? (
+                <Alert variant="destructive">
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{updateError}</AlertDescription>
                 </Alert>
-              ))}
+              ) : recentUpdates.length > 0 ? (
+                recentUpdates.map((update) => (
+                  <Alert key={update.id}>
+                    <AlertTitle className="flex items-center justify-between">
+                      <span>{update.title}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6"
+                        asChild
+                      >
+                        <a 
+                          href={update.html_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1"
+                        >
+                          View <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </Button>
+                    </AlertTitle>
+                    <AlertDescription className="mt-2">
+                      <div className="text-sm text-muted-foreground">
+                        {update.abstract}
+                      </div>
+                      <div className="mt-2 flex gap-2 flex-wrap">
+                        {update.agency_names.map((agency, index) => (
+                          <span 
+                            key={index}
+                            className="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10"
+                          >
+                            {agency}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        Published on {new Date(update.publication_date).toLocaleDateString()}
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                ))
+              ) : (
+                <Alert>
+                  <AlertTitle>No Updates Available</AlertTitle>
+                  <AlertDescription>
+                    There are no recent regulatory updates to display.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -309,63 +301,102 @@ export default function Dashboard() {
   )
 }
 
-const KnowledgeGraphViewer: React.FC<KnowledgeGraphViewerProps> = ({ data, expertiseLevel, onNodeSelect }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const handleNodeClick = useCallback((node: GraphData['nodes'][0]) => {
-    onNodeSelect(node);
-  }, [onNodeSelect]);
-
+const KnowledgeGraphViewer = ({ data, expertiseLevel, onNodeSelect }: KnowledgeGraphViewerProps) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const width = canvas.width
+    const height = canvas.height
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    ctx.clearRect(0, 0, width, height)
 
-    const width = canvas.width;
-    const height = canvas.height;
-
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-
-    // Draw nodes
     data.nodes.forEach((node, index) => {
-      const x = (index + 1) * (width / (data.nodes.length + 1));
-      const y = height / 2;
+      const x = (index + 1) * (width / (data.nodes.length + 1))
+      const y = height / 2
 
-      ctx.beginPath();
-      ctx.arc(x, y, 20, 0, 2 * Math.PI);
-      ctx.fillStyle = node.expertiseLevel <= expertiseLevel ? 'hsl(var(--primary))' : 'hsl(var(--muted))';
-      ctx.fill();
+      ctx.beginPath()
+      ctx.arc(x, y, 20, 0, 2 * Math.PI)
+      ctx.fillStyle = node.expertiseLevel <= expertiseLevel ? 'hsl(var(--primary))' : 'hsl(var(--muted))'
+      ctx.fill()
 
-      ctx.fillStyle = 'hsl(var(--foreground))';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(node.title, x, y);
-    });
+      ctx.fillStyle = 'hsl(var(--foreground))'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(node.title, x, y)
+    })
 
-    // Draw edges
-    ctx.strokeStyle = 'hsl(var(--muted-foreground))';
+    ctx.strokeStyle = 'hsl(var(--muted-foreground))'
     data.edges.forEach(edge => {
-      const sourceNode = data.nodes.find(node => node.id === edge.source);
-      const targetNode = data.nodes.find(node => node.id === edge.target);
-      if (!sourceNode || !targetNode) return;
+      const sourceNode = data.nodes.find(node => node.id === edge.source)
+      const targetNode = data.nodes.find(node => node.id === edge.target)
+      
+      if (!sourceNode || !targetNode) return
+      
+      const sourceIndex = data.nodes.indexOf(sourceNode)
+      const targetIndex = data.nodes.indexOf(targetNode)
 
-      const sourceIndex = data.nodes.indexOf(sourceNode);
-      const targetIndex = data.nodes.indexOf(targetNode);
+      const sourceX = (sourceIndex + 1) * (width / (data.nodes.length + 1))
+      const sourceY = height / 2
+      const targetX = (targetIndex + 1) * (width / (data.nodes.length + 1))
+      const targetY = height / 2
 
-      const sourceX = (sourceIndex + 1) * (width / (data.nodes.length + 1));
-      const sourceY = height / 2;
-      const targetX = (targetIndex + 1) * (width / (data.nodes.length + 1));
-      const targetY = height / 2;
+      ctx.beginPath()
+      ctx.moveTo(sourceX, sourceY)
+      ctx.lineTo(targetX, targetY)
+      ctx.stroke()
+    })
+  }, [data, expertiseLevel])
 
-      ctx.beginPath();
-      ctx.moveTo(sourceX, sourceY);
-      ctx.lineTo(targetX, targetY);
-      ctx.stroke();
-    });
-  }, [data, expertiseLevel]);
+  const handleClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const x = event.clientX - rect.left
+    const y = event.clientY - rect.top
 
-  return <canvas ref={canvasRef} className="w-full h-full" />;
-};
+    data.nodes.forEach((node, index) => {
+      const nodeX = (index + 1) * (canvas.width / (data.nodes.length + 1))
+      const nodeY = canvas.height / 2
+
+      const distance = Math.sqrt((x - nodeX) ** 2 + (y - nodeY) ** 2)
+      if (distance <= 20) {
+        onNodeSelect(node)
+      }
+    })
+  }, [data, onNodeSelect])
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={800}
+      height={400}
+      onClick={handleClick}
+      className="w-full h-64 border rounded"
+    />
+  )
+}
+
+const NodeDetails = ({ node, onClose }: NodeDetailsProps) => {
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold">{node.title}</h3>
+        <Button variant="ghost" size="icon" onClick={onClose}>
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+      
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">Domain: {node.domain}</p>
+        <p className="text-sm text-muted-foreground">
+          Expertise Level: {node.expertiseLevel}
+        </p>
+        <p className="mt-4">{node.description}</p>
+      </div>
+    </div>
+  )
+}

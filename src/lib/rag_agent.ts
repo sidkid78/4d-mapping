@@ -1,211 +1,223 @@
-import { SearchClient, AzureKeyCredential } from "@azure/search-documents";
-import neo4j from "neo4j-driver";
-import { Driver } from "neo4j-driver";
+import { SearchClient, AzureKeyCredential, ExtractiveQueryAnswer, ExtractiveQueryCaption, QueryType, SearchOptions, SemanticSearchOptions } from "@azure/search-documents";
 import { AzureOpenAI } from "openai";
+import { ExplanationNode } from '../types/explanation';
+import { Coordinates4D } from '../types/shared';
 
-interface RAGConfig {
-  search_endpoint?: string;
-  search_key?: string;
-  neo4j_uri?: string;
-  neo4j_user?: string;
-  neo4j_password?: string;
-  azure_openai_endpoint?: string;
-  azure_openai_deployment_name?: string;
-  azure_openai_api_version?: string;
-  key_vault_url?: string;
-  azure_openai_secret_name?: string;
+interface Persona {
+  type: 'legal' | 'financial' | 'compliance';
+  confidence: number;
+  analysis: string;
 }
 
-interface UserContext {
-  expertise_level: number;
-}
-
-interface RAGResult {
-  prompt: string;
-  context: string;
-  retrieved_docs: {
+interface RAGResponse {
+  query: string;
+  semantic_results: Array<{
     id: string;
     content: string;
-    metadata: Record<string, unknown>;
-    score: number;
-  }[];
+    coordinates: Coordinates4D;
+    relevance_score: number;
+  }>;
+  personas: Persona[];
+  visualization_data: {
+    space_mapping: {
+      nodes: Array<{
+        id: string;
+        coordinates: Coordinates4D;
+        category: string;
+        relevance: number;
+      }>;
+      edges: Array<{
+        source: string;
+        target: string;
+        weight: number;
+      }>;
+    };
+    heatmap_data: {
+      matrix: number[][];
+      categories: string[];
+      requirements: string[];
+    };
+  };
+  explanation_tree: ExplanationNode;
+  response: string;
 }
 
 interface SearchDocument {
   id: string;
   content: string;
-  metadata: Record<string, unknown>;
-  score: number;
+  metadata: Record<string, any>;
+  coordinates: Coordinates4D;
+  embedding?: number[];
+  _score?: number;
 }
 
 export class RAGAgent {
   private searchClient: SearchClient<SearchDocument>;
-  private graphDb: Driver;
-  private openai: AzureOpenAI
-  private deploymentName: string;
+  private openai: AzureOpenAI;
 
-  constructor(config: RAGConfig) {
-    if (!config.search_endpoint || !config.search_key) {
-      throw new Error("Missing required Azure Search configuration");
-    }
-
-    if (!config.neo4j_uri || !config.neo4j_user || !config.neo4j_password) {
-      throw new Error("Missing required Neo4j configuration");
-    }
-
-    if (!config.azure_openai_endpoint || !config.azure_openai_deployment_name) {
-      throw new Error("Missing required Azure OpenAI configuration");
-    }
-
+  constructor(config: {
+    azure_endpoint: string;
+    azure_deployment: string;
+    search_endpoint: string;
+    search_key: string;
+  }) {
     this.searchClient = new SearchClient(
       config.search_endpoint,
       "documents",
       new AzureKeyCredential(config.search_key)
     );
 
-    this.graphDb = neo4j.driver(
-      config.neo4j_uri,
-      neo4j.auth.basic(config.neo4j_user, config.neo4j_password)
+    this.openai = new AzureOpenAI({
+      apiKey: config.azure_deployment,
+      endpoint: config.azure_endpoint,
+      apiVersion: "2024-08-01-preview"
+    });
+  }
+
+  async process_query(query: string, context: Record<string, any>): Promise<RAGResponse> {
+    // Get embeddings
+    const embedding = await this.openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: query
+    });
+
+    // Search in 4D space
+    const searchOptions: SearchOptions<SearchDocument> = {
+      queryType: 'semantic',
+      semanticSearchOptions: {
+        queryFields: ['content'],
+        prioritizedFields: {
+          titleFields: [],
+          keywordsFields: [],
+          contentFields: ['content']
+        }
+      },
+      select: ['id', 'content', 'metadata', 'coordinates', '_score'],
+      top: 5,
+      includeTotalCount: true,
+      queryLanguage: 'en-us',
+      semanticConfiguration: 'default',
+      searchFields: ['content'],
+      orderBy: ['_score desc']
+    };
+
+    const searchResults = await this.searchClient.search("*", searchOptions);
+
+    // Process results
+    const documents = [];
+    for await (const result of searchResults.results) {
+      documents.push(result.document);
+    }
+
+    // Generate response
+    const completion = await this.openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        { role: "system", content: "You are a helpful assistant." },
+        { role: "user", content: this.constructPrompt(query, documents) }
+      ]
+    });
+
+    // Generate 4D visualization
+    const visualizationData = await this.generate4DVisualization(documents, embedding.data[0].embedding);
+
+    return {
+      query,
+      semantic_results: documents.map(doc => ({
+        id: doc.id,
+        content: doc.content,
+        coordinates: doc.coordinates,
+        relevance_score: doc._score || 0
+      })),
+      personas: [],
+      visualization_data: visualizationData,
+      explanation_tree: {
+        step: "Query Analysis",
+        reasoning: `Analyzing query: ${query}`,
+        confidence: 0.9,
+        evidence: documents.slice(0, 3).map(doc => ({
+          content: doc.content,
+          source: doc.id,
+          relevance: doc._score || 0
+        })),
+        subSteps: []
+      } as ExplanationNode,
+      response: completion.choices[0]?.message?.content || ""
+    };
+  }
+
+  private constructPrompt(query: string, documents: any[]): string {
+    return `
+    Query: ${query}
+
+    Context:
+    ${documents.map(doc => doc.content).join('\n\n')}
+
+    Please provide a detailed response based on the above context.
+    `;
+  }
+
+  private async generate4DVisualization(documents: any[], query_embedding: number[]): Promise<RAGResponse['visualization_data']> {
+    // Generate network visualization
+    const nodes = documents.map(doc => ({
+      id: doc.id,
+      coordinates: doc.coordinates,
+      category: doc.metadata.category,
+      relevance: this.calculateRelevance(doc.embedding, query_embedding)
+    }));
+
+    const edges = this.generateEdges(nodes);
+    
+    // Generate heatmap
+    const heatmap = this.generateComplianceHeatmap(documents);
+
+    return {
+      space_mapping: { nodes, edges },
+      heatmap_data: heatmap
+    };
+  }
+
+  private generateEdges(nodes: any[]) {
+    return nodes.flatMap((node, i) => 
+      nodes.slice(i + 1).map(other => ({
+        source: node.id,
+        target: other.id,
+        weight: this.calculateSimilarity(node.coordinates, other.coordinates)
+      }))
+    );
+  }
+
+  private generateComplianceHeatmap(documents: any[]) {
+    const categorySet = new Set(documents.map(d => d.metadata.category));
+    const requirementSet = new Set(documents.map(d => d.metadata.requirement));
+    
+    const categories = Array.from(categorySet);
+    const requirements = Array.from(requirementSet);
+    
+    const matrix = requirements.map(req =>
+      categories.map(cat => {
+        const relevantDocs = documents.filter(d => 
+          d.metadata.category === cat && 
+          d.metadata.requirement === req
+        );
+        return relevantDocs.length ? Math.max(...relevantDocs.map(d => d.score)) : 0;
+      })
     );
 
-    this.openai = new AzureOpenAI({
-      apiKey: config.azure_openai_secret_name || "",
-      endpoint: config.azure_openai_endpoint,
-      apiVersion: config.azure_openai_api_version || "2024-08-01-preview"
-    });
-
-    this.deploymentName = config.azure_openai_deployment_name;
+    return { matrix, categories, requirements };
   }
 
-  async process_query(query: string, userContext: UserContext): Promise<{
-    query: string;
-    response: string;
-    context: string;
-    retrieved_docs: {
-      id: string;
-      content: string;
-      metadata: Record<string, unknown>;
-      score: number; 
-    }[];
-  }> {
-    try {
-      const subQueries = await this.decompose_query(query);
-      const documents = await this.retrieve_documents(subQueries);
-      const rankedDocs = this.rank_documents(documents, userContext);
-      const graphContext = await this.retrieve_graph_context(query);
-      const graphDoc: SearchDocument = {
-        id: 'graph-context',
-        content: graphContext,
-        metadata: {},
-        score: 1
-      };
-      const context = await this.synthesize_context([...rankedDocs, graphDoc]);
-      const prompt = this.construct_prompt(query, context, userContext);
-
-      const ragResult: RAGResult = {
-        prompt,
-        context,
-        retrieved_docs: rankedDocs
-      };
-
-      const response = await this.process_rag_result(ragResult);
-
-      return {
-        query,
-        response,
-        context,
-        retrieved_docs: rankedDocs
-      };
-
-    } catch (error) {
-      console.error("RAG processing failed:", error);
-      throw error;
-    }
+  private calculateRelevance(v1: number[], v2: number[]): number {
+    // Cosine similarity
+    const dotProduct = v1.reduce((sum, a, i) => sum + a * v2[i], 0);
+    const mag1 = Math.sqrt(v1.reduce((sum, a) => sum + a * a, 0));
+    const mag2 = Math.sqrt(v2.reduce((sum, a) => sum + a * a, 0));
+    return dotProduct / (mag1 * mag2);
   }
 
-  private async decompose_query(query: string): Promise<string[]> {
-    const decompositionPrompt = `
-      Break down this complex query into simpler sub-queries. Return only the sub-queries, one per line:
-      Query: ${query}
-    `;
-
-    const response = await this.openai.chat.completions.create({
-      model: this.deploymentName,
-      messages: [{
-        role: "user",
-        content: decompositionPrompt
-      }]
-    });
-
-    const subQueries = response.choices[0]?.message?.content?.split('\n')
-      .filter((q: string) => q.trim()) || [query];
-    return subQueries.length > 0 ? subQueries : [query];
-  }
-
-  private async retrieve_documents(subQueries: string[]): Promise<SearchDocument[]> {
-    const documents: SearchDocument[] = [];
-    
-    for (const query of subQueries) {
-      const searchResults = await this.searchClient.search(query);
-      for await (const result of searchResults.results) {
-        documents.push(result.document);
-      }
-    }
-
-    return documents;
-  }
-
-  private rank_documents(documents: SearchDocument[], userContext: UserContext): SearchDocument[] {
-    const expertiseWeight = userContext.expertise_level / 10;
-    return documents.sort((a, b) => {
-      const scoreA = (b.score || 0) * expertiseWeight;
-      const scoreB = (a.score || 0) * expertiseWeight;
-      return scoreA - scoreB;
-    });
-  }
-
-  private async synthesize_context(rankedDocs: SearchDocument[]): Promise<string> {
-    return rankedDocs.map(doc => doc.content).join("\n");
-  }
-
-  private construct_prompt(query: string, context: string, userContext: UserContext): string {
-    return `
-Given the following context and user expertise level (${userContext.expertise_level}), 
-please provide a comprehensive answer to this question: ${query}
-
-Context:
-${context}
-`;
-  }
-
-  private async process_rag_result(ragResult: RAGResult): Promise<string> {
-    const response = await this.openai.chat.completions.create({
-      model: this.deploymentName,
-      messages: [{
-        role: "system",
-        content: "You are a helpful assistant that provides accurate answers based on the given context."
-      },
-      {
-        role: "user",
-        content: ragResult.prompt
-      }]
-    });
-
-    return response.choices[0]?.message?.content || "Unable to generate response";
-  }
-
-  private async retrieve_graph_context(query: string): Promise<string> {
-    const session = this.graphDb.session();
-    try {
-        const result = await session.executeRead(tx =>
-            tx.run(
-                'MATCH (n) WHERE n.content CONTAINS $query RETURN n.content',
-                { query }
-            )
-        );
-        return result.records.map(record => record.get('n.content')).join('\n');
-    } finally {
-        await session.close();
-    }
+  private calculateSimilarity(c1: Coordinates4D, c2: Coordinates4D): number {
+    const dims = ['x', 'y', 'z', 'e'] as const;
+    const sqSum = dims.reduce((sum, dim) => sum + Math.pow(c1[dim] - c2[dim], 2), 0);
+    return 1 / (1 + Math.sqrt(sqSum));
   }
 }
