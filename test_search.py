@@ -5,16 +5,16 @@ import os
 
 # Initialize the OpenAI client for embeddings
 openai_client = AzureOpenAI(
-    api_key="8ec992fbf7f04b648a961c22aa1b38dd",  # From your .env
+    api_key="",  # From your .env
     api_version="2024-08-01-preview",
-    azure_endpoint="https://openai-procurity-ai.openai.azure.com"  # From your .env
+    azure_endpoint=""  # From your .env
 )
 
 # Initialize the search client
 search_client = SearchClient(
     endpoint="https://sksearchdev.search.windows.net",
     index_name="documents",
-    credential=AzureKeyCredential("nRgpiKwRUiLR29TGWbAwZubVu6XUbxhTYJjzTDN5yXAzSeCeeU0t")
+    credential=AzureKeyCredential("")
 )
 
 # Get embeddings for a test document
