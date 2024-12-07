@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Add your Next.js configuration options here
+  experimental: {
+    appDir: true
+  },
+  pageExtensions: ['js', 'jsx', 'ts', 'tsx']
 }
 
 export default nextConfig
