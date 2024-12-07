@@ -1,3 +1,4 @@
+import asyncio
 from typing import Dict, List, Optional, Union
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,6 +14,26 @@ from neo4j import GraphDatabase
 
 @dataclass
 class FederalRegisterEntry:
+    """
+    Dataclass representing a Federal Register entry.
+    
+    Attributes:
+        entry_id (str): Unique identifier for the entry.
+        document_number (str): Document number of the entry.
+        publication_date (datetime): Publication date of the entry.
+        document_type (str): Type of the document.
+        title (str): Title of the document.
+        agency (str): Agency responsible for the document.
+        cfr_reference (Union[str, List[str]]): CFR references associated with the document.
+        summary (str): Summary of the document.
+        full_text (str): Full text of the document.
+        nuremberg_number (str): Nuremberg number for the document.
+        sam_tag (str): SAM tag for the document.
+        original_tags (Dict): Original tags associated with the document.
+        coordinates (tuple): 4D coordinates for the document.
+        effective_date (Optional[datetime]): Effective date of the document.
+        significant (bool): Indicates if the document is significant.
+    """
     entry_id: str
     document_number: str
     publication_date: datetime
@@ -30,7 +51,26 @@ class FederalRegisterEntry:
     significant: bool
 
 class FederalRegisterIntegrator:
+    """
+    Integrates Federal Register entries into the system.
+    
+    This class handles the ingestion, processing, storage, and indexing of Federal Register entries.
+    It also creates crosswalks between entries and other regulatory data.
+    
+    Attributes:
+        config (Dict): Configuration dictionary containing service endpoints and credentials.
+        logger (logging.Logger): Logger for the class.
+        blob_service (BlobServiceClient): Azure Blob Service client for storage.
+        search_client (SearchClient): Azure Search client for indexing.
+        graph_db (GraphDatabase.driver): Neo4j driver for crosswalks.
+    """
     def __init__(self, config: Dict):
+        """
+        Initialize the FederalRegisterIntegrator with Azure services and Neo4j connection.
+        
+        Args:
+            config (Dict): Configuration dictionary containing service endpoints and credentials.
+        """
         self.config = config
         self.logger = logging.getLogger(__name__)
         
@@ -53,6 +93,12 @@ class FederalRegisterIntegrator:
     async def ingest_federal_register(self) -> List[str]:
         """
         Ingest new Federal Register entries.
+        
+        Fetches the latest entries from the Federal Register API, processes them, stores them,
+        creates crosswalks, and indexes them for search.
+        
+        Returns:
+            List[str]: List of processed entry IDs.
         """
         try:
             # Fetch latest entries from Federal Register API
@@ -83,6 +129,12 @@ class FederalRegisterIntegrator:
     async def _fetch_federal_register(self) -> List[Dict]:
         """
         Fetch entries from Federal Register API.
+        
+        Returns:
+            List[Dict]: List of raw Federal Register entries.
+        
+        Raises:
+            Exception: If the API request fails.
         """
         async with aiohttp.ClientSession() as session:
             async with session.get(
@@ -111,6 +163,15 @@ class FederalRegisterIntegrator:
     async def _process_entry(self, raw_entry: Dict) -> FederalRegisterEntry:
         """
         Transform raw Federal Register entry into framework format.
+        
+        Args:
+            raw_entry (Dict): Raw Federal Register entry.
+        
+        Returns:
+            FederalRegisterEntry: Processed Federal Register entry.
+        
+        Raises:
+            Exception: If entry processing fails.
         """
         try:
             # Generate Nuremberg number
@@ -151,6 +212,12 @@ class FederalRegisterIntegrator:
     async def _create_crosswalks(self, entry: FederalRegisterEntry) -> None:
         """
         Create vertical and diagonal crosswalks.
+        
+        Args:
+            entry (FederalRegisterEntry): Processed Federal Register entry.
+        
+        Raises:
+            Exception: If crosswalk creation fails.
         """
         try:
             with self.graph_db.session() as session:
@@ -162,7 +229,7 @@ class FederalRegisterIntegrator:
                     CREATE (fr)-[:AFFECTS {
                         CreatedAt: datetime(),
                         Type: 'Vertical'
-                    }]->(reg)
+                    }]->asyncio
                     """,
                     doc_num=entry.document_number,
                     cfr_refs=entry.cfr_reference
@@ -179,6 +246,12 @@ class FederalRegisterIntegrator:
                                         entry: FederalRegisterEntry) -> None:
         """
         Create diagonal crosswalks based on content analysis.
+        
+        Args:
+            entry (FederalRegisterEntry): Processed Federal Register entry.
+        
+        Raises:
+            Exception: If diagonal crosswalk creation fails.
         """
         try:
             # Analyze content for relevant connections
@@ -221,6 +294,12 @@ class FederalRegisterIntegrator:
                                        entry: FederalRegisterEntry) -> Dict:
         """
         Analyze entry to determine regulatory impact.
+        
+        Args:
+            entry (FederalRegisterEntry): Processed Federal Register entry.
+        
+        Returns:
+            Dict: Analysis results including affected sectors and clauses.
         """
         # Initialize AI personas for analysis
         legal_analyst = self._get_ai_persona("legal_analyst")

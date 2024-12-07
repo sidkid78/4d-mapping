@@ -1,29 +1,55 @@
 import { NextResponse } from 'next/server'
+import { 
+  Document, 
+  VectorStoreIndex,
+  OpenAI,
+  OpenAIEmbedding,
+  Metadata,
+  NodeWithScore
+} from 'llamaindex'
 
-export async function POST(request: Request) {
+interface ChatRequest {
+  messages: Array<{ content: string }>;
+  documents: Array<{ content: string; id: string }>;
+}
+
+const llm = new OpenAI({
+  apiKey: process.env.AZURE_OPENAI_API_KEY || '',
+  model: 'gpt-4o',
+  temperature: 0.7,
+});
+
+const embedModel = new OpenAIEmbedding({
+  apiKey: process.env.OPENAI_API_KEY || '',
+  model: 'text-embedding-3-small',
+});
+
+export async function POST(req: Request) {
   try {
-    const { message } = await request.json()
-    if (!message) {
-      return NextResponse.json(
-        { error: 'No message provided' },
-        { status: 400 }
-      )
-    }
+    const { messages, documents }: ChatRequest = await req.json();
+    
+    const docs = documents.map((doc) => 
+      new Document({
+        text: doc.content,
+        metadata: { source: doc.id }
+      })
+    );
 
-    // Here you would typically:
-    // 1. Connect to your LlamaIndex instance
-    // 2. Query the vector store
-    // 3. Generate a response using the context
+    const index = await VectorStoreIndex.fromDocuments(docs);
+    const queryEngine = index.asQueryEngine();
+    const userMessage = messages[messages.length - 1].content;
+    const response = await queryEngine.query({ query: userMessage });
 
-    // For now, return a placeholder response
-    return NextResponse.json({
-      response: `This is a placeholder response. You asked: ${message}`
-    })
+    return NextResponse.json({ 
+      content: response.response,
+      sources: response.sourceNodes?.map((node: NodeWithScore<Metadata>) => node.node.metadata) || []
+    });
+
   } catch (error) {
-    console.error('Error processing chat:', error)
+    console.error('Chat API error:', error);
     return NextResponse.json(
-      { error: 'Error processing chat request' },
+      { error: 'Failed to process chat request' },
       { status: 500 }
-    )
+    );
   }
-} 
+}

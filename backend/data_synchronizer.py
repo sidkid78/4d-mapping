@@ -1,4 +1,32 @@
-# Schema mappings for data synchronization
+"""
+Data Synchronization Schema Module
+
+This module defines the schema mappings and validation rules for synchronizing data
+between different sources into a unified format.
+
+Components:
+- schema_mappings: Dictionary defining field mappings for each data source
+- required_fields: List of mandatory fields for validation
+
+Schema Mapping Types:
+- direct: Direct field copy from source to destination
+- transform: Apply transformation function to source field
+- composite: Combine multiple source fields using composition function
+
+Example Mapping:
+    "federal_register": {
+        "internal_id": {
+            "type": "transform",
+            "source_field": "document_number",
+            "transform_function": "prefix_with_fr"
+        }
+    }
+
+Dependencies:
+    - Transformation functions defined elsewhere in codebase
+    - Composition functions for combining multiple fields
+"""
+
 schema_mappings = {
     "federal_register": {
         "internal_id": {

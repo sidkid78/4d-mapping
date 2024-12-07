@@ -1,6 +1,6 @@
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, UTC
 import uuid
 import yaml
 import logging
@@ -10,14 +10,28 @@ from azure.search.documents import SearchClient
 from azure.keyvault.keys import KeyClient
 from azure.core.credentials import AzureKeyCredential
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-import asyncio
 from sentence_transformers import SentenceTransformer
 
 @dataclass
 class Clause:
+    """Represents an acquisition clause with its metadata and analysis.
+    
+    Attributes:
+        clause_id: Unique identifier for the clause
+        nuremberg_number: Standardized Nuremberg reference number
+        sam_tag: System for Award Management (SAM) tag
+        original_reference: Original document reference
+        original_name: Original name/title of the clause
+        content: Full text content of the clause
+        effective_date: Date when clause becomes effective
+        domain: Domain/category the clause belongs to
+        level: Complexity/importance level (1-5)
+        coordinates: Semantic coordinates for clause positioning
+        related_regulations: List of related regulatory documents
+        ai_personas: List of AI personas for analysis
+    """
     clause_id: str
-    nuremberg_number: str
+    nuremberg_number: str 
     sam_tag: str
     original_reference: str
     original_name: str
@@ -25,38 +39,75 @@ class Clause:
     effective_date: datetime
     domain: str
     level: int
-    coordinates: tuple
+    coordinates: Tuple[int, int]
     related_regulations: List[Dict]
     ai_personas: List[str]
 
 class AcquisitionClauseManager:
-    def __init__(self, config: Dict):
+    """Manages acquisition clauses including storage, indexing, and analysis.
+    
+    This class provides functionality for:
+    - Storing and retrieving clauses from PostgreSQL database
+    - Indexing clauses in Azure Cognitive Search
+    - Generating unique identifiers (Nuremberg numbers and SAM tags)
+    - Calculating semantic coordinates for clauses
+    - Managing AI personas for clause analysis
+    - Reconciling analysis results from multiple AI personas
+
+    Attributes:
+        config: Configuration dictionary for services and connections
+        logger: Logging instance for error tracking
+        model: SentenceTransformer model for text embeddings
+        pg_conn: PostgreSQL database connection
+        graph_db: Neo4j graph database connection
+        search_client: Azure Cognitive Search client
+        key_client: Azure Key Vault client
+    """
+
+    def __init__(self, config: Dict) -> None:
+        """Initialize the AcquisitionClauseManager.
+        
+        Args:
+            config: Dictionary containing configuration parameters for all services
+        """
         self.config = config
         self.logger = logging.getLogger(__name__)
+        self._init_connections(config)
+        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+
+    def _init_connections(self, config: Dict) -> None:
+        """Initialize database and service connections.
         
-        # Initialize database connections
+        Args:
+            config: Dictionary containing connection parameters for all services
+        """
         self.pg_conn = psycopg2.connect(**config["postgresql"])
         self.graph_db = GraphDatabase.driver(**config["neo4j"])
         
-        # Initialize Azure services
         self.search_client = SearchClient(
             endpoint=config["search_endpoint"],
             index_name="clauses",
             credential=AzureKeyCredential(config["search_key"])
         )
+        
         self.key_client = KeyClient(
             vault_url=config["keyvault_url"],
             credential=AzureKeyCredential(config["keyvault_key"])
         )
-        
-        # Initialize embedding model
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
 
     async def _store_entry(self, entry: Dict) -> None:
-        """Store entry data in PostgreSQL."""
+        """Store entry data in PostgreSQL database.
+        
+        Args:
+            entry: Dictionary containing entry data to store
+            
+        Raises:
+            Exception: If database operation fails
+        """
         try:
             with self.pg_conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO entries (
                         entry_id, title, content, metadata, 
                         created_at, updated_at
@@ -67,8 +118,8 @@ class AcquisitionClauseManager:
                         entry["title"],
                         entry["content"],
                         yaml.dump(entry["metadata"]),
-                        datetime.utcnow(),
-                        datetime.utcnow()
+                        datetime.now(UTC),
+                        datetime.now(UTC)
                     )
                 )
                 self.pg_conn.commit()
@@ -77,9 +128,15 @@ class AcquisitionClauseManager:
             raise
 
     async def _index_entry(self, entry: Dict) -> None:
-        """Index entry in Azure Cognitive Search."""
+        """Index entry in Azure Cognitive Search.
+        
+        Args:
+            entry: Dictionary containing entry data to index
+            
+        Raises:
+            Exception: If indexing operation fails
+        """
         try:
-            # Generate embedding vector
             embedding = self.model.encode(entry["content"])
             
             search_entry = {
@@ -97,123 +154,189 @@ class AcquisitionClauseManager:
             self.logger.error(f"Failed to index entry: {str(e)}")
             raise
 
-    def _generate_nuremberg_number(self, content: str) -> str:
-        """Generate Nuremberg number based on content analysis."""
+    def _generate_identifier(self, content: str, prefix: str, hash_length: int = 4) -> str:
+        """Generate identifier (Nuremberg number or SAM tag) from content.
+        
+        Args:
+            content: Text content to generate identifier from
+            prefix: Prefix for the identifier
+            hash_length: Length of hash component in identifier
+            
+        Returns:
+            Generated identifier string
+            
+        Raises:
+            Exception: If identifier generation fails
+        """
         try:
-            # Generate embedding
             embedding = self.model.encode(content)
-            
-            # Use embedding components to generate hash
-            hash_value = hash(str(embedding[:5].tolist())) % 10000
-            
-            # Format Nuremberg number
-            return f"NB-{hash_value:04d}"
-            
+            hash_value = hash(str(embedding[:5].tolist())) % (10 ** hash_length)
+            return f"{prefix}-{hash_value:0{hash_length}d}"
         except Exception as e:
-            self.logger.error(f"Failed to generate Nuremberg number: {str(e)}")
+            self.logger.error(f"Failed to generate {prefix} identifier: {str(e)}")
             raise
 
+    def _generate_nuremberg_number(self, content: str) -> str:
+        """Generate Nuremberg number based on content analysis.
+        
+        Args:
+            content: Text content to generate Nuremberg number from
+            
+        Returns:
+            Generated Nuremberg number
+        """
+        return self._generate_identifier(content, "NB")
+
     def _generate_sam_tag(self, clause_data: Dict) -> str:
-        """Generate SAM tag based on clause data."""
+        """Generate SAM tag based on clause data.
+        
+        Args:
+            clause_data: Dictionary containing clause information
+            
+        Returns:
+            Generated SAM tag
+            
+        Raises:
+            Exception: If SAM tag generation fails
+        """
         try:
-            # Extract domain prefix
             domain_prefix = clause_data["domain"][:3].upper()
-            
-            # Generate level component
             level_component = f"L{clause_data['level']}"
-            
-            # Generate hash from embedding
-            embedding = self.model.encode(clause_data["content"])
-            content_hash = hash(str(embedding[:3].tolist())) % 1000
-            
-            # Combine components
+            content_hash = hash(str(self.model.encode(clause_data["content"])[:3].tolist())) % 1000
             return f"{domain_prefix}-{level_component}-{content_hash:03d}"
-            
         except Exception as e:
             self.logger.error(f"Failed to generate SAM tag: {str(e)}")
             raise
 
-    def _generate_coordinates(self, content: str) -> tuple:
-        """Generate semantic coordinates using embeddings."""
+    def _generate_coordinates(self, content: str) -> Tuple[int, int]:
+        """Generate semantic coordinates using embeddings.
+        
+        Args:
+            content: Text content to generate coordinates from
+            
+        Returns:
+            Tuple of (x, y) coordinates
+            
+        Raises:
+            Exception: If coordinate generation fails
+        """
         try:
-            # Get content embedding
             embedding = self.model.encode(content)
-            
-            # Use first two dimensions as coordinates
-            x = int(embedding[0] * 100)
-            y = int(embedding[1] * 100)
-            
-            return (x, y)
-            
+            return (int(embedding[0] * 100), int(embedding[1] * 100))
         except Exception as e:
             self.logger.error(f"Failed to generate coordinates: {str(e)}")
             raise
 
-    def _get_ai_persona(self, role: str) -> object:
-        """Get appropriate AI persona for analysis."""
+    def _get_ai_persona(self, role: str) -> Dict:
+        """Get appropriate AI persona configuration for analysis.
+        
+        Args:
+            role: Role identifier for the AI persona
+            
+        Returns:
+            Dictionary containing persona configuration
+        """
         personas = {
             "legal": {
-                "model": "gpt-3.5-turbo",
+                "model": "gpt-4o",
                 "temperature": 0.3,
                 "system_prompt": "You are a legal expert analyzing acquisition clauses."
             },
             "technical": {
-                "model": "gpt-3.5-turbo",
+                "model": "gpt-4o",
                 "temperature": 0.2,
                 "system_prompt": "You are a technical expert analyzing implementation details."
             },
             "compliance": {
-                "model": "gpt-3.5-turbo",
+                "model": "gpt-4o",
                 "temperature": 0.1,
                 "system_prompt": "You are a compliance expert verifying regulatory adherence."
             }
         }
         return personas.get(role, {
-            "model": "gpt-4",
+            "model": "gpt-4o",
             "temperature": 0.5,
             "system_prompt": "You are an AI assistant analyzing acquisition clauses."
         })
 
     async def _reconcile_analysis_results(self, results: List[Dict]) -> Dict:
-        """Reconcile analysis results from multiple AI personas."""
+        """Reconcile analysis results from multiple AI personas.
+        
+        Args:
+            results: List of analysis results from different personas
+            
+        Returns:
+            Dictionary containing reconciled analysis
+            
+        Raises:
+            Exception: If reconciliation fails
+        """
         try:
-            # Extract key findings and generate embeddings
-            findings = []
-            for result in results:
-                for finding in result.get("findings", []):
-                    finding["embedding"] = self.model.encode(finding["text"])
-                    findings.append(finding)
-            
-            # Cluster similar findings
-            unique_findings = []
-            seen_embeddings = set()
-            for finding in findings:
-                embedding_key = tuple(finding["embedding"].round(2))
-                if embedding_key not in seen_embeddings:
-                    unique_findings.append(finding)
-                    seen_embeddings.add(embedding_key)
-            
-            # Average confidence scores
-            confidence_scores = [result.get("confidence", 0) for result in results]
-            avg_confidence = sum(confidence_scores) / len(confidence_scores)
-            
-            # Combine recommendations with deduplication
-            all_recommendations = []
-            seen_recommendations = set()
-            for result in results:
-                for rec in result.get("recommendations", []):
-                    rec_text = str(rec)
-                    if rec_text not in seen_recommendations:
-                        all_recommendations.append(rec)
-                        seen_recommendations.add(rec_text)
+            findings = self._process_findings(results)
+            avg_confidence = self._calculate_confidence(results)
+            recommendations = self._deduplicate_recommendations(results)
             
             return {
-                "findings": unique_findings,
+                "findings": findings,
                 "confidence": avg_confidence,
-                "recommendations": all_recommendations,
-                "timestamp": datetime.utcnow().isoformat()
+                "recommendations": recommendations,
+                "timestamp": datetime.now(UTC).isoformat()
             }
-            
         except Exception as e:
             self.logger.error(f"Failed to reconcile analysis: {str(e)}")
             raise
+
+    def _process_findings(self, results: List[Dict]) -> List[Dict]:
+        """Process and deduplicate findings from analysis results.
+        
+        Args:
+            results: List of analysis results containing findings
+            
+        Returns:
+            List of deduplicated findings
+        """
+        findings = []
+        seen_embeddings = set()
+        
+        for result in results:
+            for finding in result.get("findings", []):
+                finding["embedding"] = self.model.encode(finding["text"])
+                embedding_key = tuple(finding["embedding"].round(2))
+                if embedding_key not in seen_embeddings:
+                    findings.append(finding)
+                    seen_embeddings.add(embedding_key)
+        
+        return findings
+
+    def _calculate_confidence(self, results: List[Dict]) -> float:
+        """Calculate average confidence score from results.
+        
+        Args:
+            results: List of analysis results containing confidence scores
+            
+        Returns:
+            Average confidence score
+        """
+        confidence_scores = [result.get("confidence", 0) for result in results]
+        return sum(confidence_scores) / len(confidence_scores)
+
+    def _deduplicate_recommendations(self, results: List[Dict]) -> List[str]:
+        """Deduplicate recommendations from results.
+        
+        Args:
+            results: List of analysis results containing recommendations
+            
+        Returns:
+            List of deduplicated recommendations
+        """
+        seen_recommendations = set()
+        recommendations = []
+        
+        for result in results:
+            for rec in result.get("recommendations", []):
+                rec_text = str(rec)
+                if rec_text not in seen_recommendations:
+                    recommendations.append(rec)
+                    seen_recommendations.add(rec_text)
+        
+        return recommendations

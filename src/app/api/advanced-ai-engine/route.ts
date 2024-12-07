@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const { isValid, errorMessage } = validateRequest(body, ['query', 'expertiseLevel'])
-    
+    1
     if (!isValid) {
       return NextResponse.json({ error: errorMessage }, { status: 400 })
     }

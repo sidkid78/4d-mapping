@@ -1,5 +1,17 @@
 import { Session, Transaction, Record } from 'neo4j-driver'
 import neo4j from 'neo4j-driver'
+import { createLogger, transports, format } from 'winston';
+
+const logger = createLogger({
+  level: 'debug',
+  format: format.combine(
+    format.colorize(),
+    format.simple()
+  ),
+  transports: [
+    new transports.Console()
+  ]
+});
 
 interface KnowledgeGraphConfig {
   neo4jUri: string

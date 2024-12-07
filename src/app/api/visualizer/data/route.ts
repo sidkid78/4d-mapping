@@ -46,7 +46,7 @@ class QueryEngine {
   async semanticQuery(query: string, context: QueryContext): Promise<SemanticResult[]> {
     const client = new OpenAIEmbeddings({
       apiKey: this.config.azure_key,
-      apiVersion: "2024-02-15-preview",
+      apiVersion: "2023-05-15",
       endpoint: this.config.azure_endpoint
     })
 

@@ -28,8 +28,7 @@ export async function GET() {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
-        next: { revalidate: 3600 }, // Cache for 1 hour
-        cache: 'force-cache'  // Force caching
+        next: { revalidate: 3600 }  // Cache for 1 hour
       }
     )
 

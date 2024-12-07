@@ -1,4 +1,4 @@
-import { SearchClient, AzureKeyCredential, ExtractiveQueryAnswer, ExtractiveQueryCaption, QueryType, SearchOptions, SemanticSearchOptions } from "@azure/search-documents";
+import { SearchClient, AzureKeyCredential, ExtractiveQueryAnswer, ExtractiveQueryCaption, QueryType, SearchOptions } from "@azure/search-documents";
 import { AzureOpenAI } from "openai";
 import { ExplanationNode } from '../types/explanation';
 import { Coordinates4D } from '../types/shared';
@@ -51,6 +51,16 @@ interface SearchDocument {
   _score?: number;
 }
 
+interface SemanticConfiguration {
+  name: string;
+}
+
+interface SemanticSearchOptions {
+  configurationName: string;
+  filter?: string;
+  orderBy?: string[];
+}
+
 export class RAGAgent {
   private searchClient: SearchClient<SearchDocument>;
   private openai: AzureOpenAI;
@@ -85,23 +95,13 @@ export class RAGAgent {
     const searchOptions: SearchOptions<SearchDocument> = {
       queryType: 'semantic',
       semanticSearchOptions: {
-        queryFields: ['content'],
-        prioritizedFields: {
-          titleFields: [],
-          keywordsFields: [],
-          contentFields: ['content']
-        }
+        configurationName: 'default',
       },
       select: ['id', 'content', 'metadata', 'coordinates', '_score'],
-      top: 5,
-      includeTotalCount: true,
-      queryLanguage: 'en-us',
-      semanticConfiguration: 'default',
-      searchFields: ['content'],
-      orderBy: ['_score desc']
+      top: 5
     };
 
-    const searchResults = await this.searchClient.search("*", searchOptions);
+    const searchResults = await this.searchClient.search(query, searchOptions);
 
     // Process results
     const documents = [];

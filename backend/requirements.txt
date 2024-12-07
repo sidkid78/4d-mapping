@@ -4,4 +4,15 @@ python-dotenv==1.0.0
 azure-search-documents==11.4.0
 azure-identity==1.14.1
 openai==1.3.5
-neo4j==5.14.1 
+neo4j==5.14.1
+scikit-learn==1.3.2
+numpy==1.26.2
+pandas==2.1.1
+matplotlib==3.8.0
+seaborn==0.12.2
+reportlab==4.0.5
+cryptography==41.0.4
+tensorflow==2.14.0
+tensorflow-federated==0.44.0
+tensorflow-privacy==0.8.13
+mp-spdz==0.3.0

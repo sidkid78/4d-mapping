@@ -1,3 +1,54 @@
+"""
+Algorithm of Thought implementation for AI-driven regulatory analysis.
+
+This module implements a systematic reasoning approach using Algorithm of Thought (AoT)
+for regulatory compliance analysis and verification.
+
+Core Components:
+- AIState: Enum defining the states in the AoT workflow
+- QueryContext: Dataclass for storing query context and metadata
+- AIPersona: Dataclass defining expert AI personas and their capabilities
+- AlgorithmOfThought: Main class implementing the AoT workflow
+- PersonaManager: Manages selection and use of expert AI personas
+- ComplianceVerifier: Verifies analysis results for compliance
+
+Key Features:
+- Multi-state workflow from query parsing to response generation
+- Context-aware query processing with industry and regional factors
+- Expert persona selection based on query requirements
+- Gap analysis and mitigation strategies
+- Compliance verification with consensus scoring
+- Spatial mapping of regulations using SpaceMapper
+
+The workflow follows these key states:
+1. Query parsing - NLP analysis of input query
+2. Contextualization - Enriching query with contextual data
+3. Data retrieval - Multi-source information gathering
+4. Gap analysis - Identifying coverage and confidence gaps
+5. Expert reasoning - Applying domain expertise
+6. Compliance check - Verifying regulatory compliance
+7. Response generation - Creating final response
+
+Example:
+    config = load_config()
+    aot = AlgorithmOfThought(config)
+    
+    context = QueryContext(
+        user_role="compliance_officer",
+        expertise_level=3,
+        industry="finance",
+        region="EU",
+        timestamp=datetime.now(),
+        request_priority="high",
+        coordinates=[51.5074, -0.1278]
+    )
+    
+    result = await aot.process_query(
+        query="Analyze GDPR requirements for fintech",
+        context=context
+    )
+"""
+
 from typing import Dict, List, Optional, Union
 from dataclasses import dataclass
 from enum import Enum
@@ -7,6 +58,8 @@ import logging
 import numpy as np
 from transformers import AutoTokenizer, AutoModel
 import torch
+from backend.config import aot_config
+from space_mapper import SpaceMapper
 
 class AIState(Enum):
     QUERY_PARSING = "query_parsing"
@@ -26,6 +79,7 @@ class QueryContext:
     region: str
     timestamp: datetime
     request_priority: str
+    coordinates: List[float]
 
 @dataclass 
 class AIPersona:
@@ -44,6 +98,7 @@ class AlgorithmOfThought:
         self.state = AIState.QUERY_PARSING
         self.tokenizer = AutoTokenizer.from_pretrained(config["bert_model"])
         self.model = AutoModel.from_pretrained(config["bert_model"])
+        self.space_mapper = SpaceMapper(config['space_mapper'])
         
     async def process_query(self, 
                           query: str, 
@@ -247,6 +302,44 @@ class AlgorithmOfThought:
             )
         }
 
+    async def _apply_expert_reasoning(self, gap_analysis: Dict, context: QueryContext) -> Dict:
+        """
+        Apply expert reasoning using relevant regulations.
+        """
+        relevant_regulations = self.space_mapper.get_nearby_regulations(
+            context.coordinates,
+            radius=self.config['contextual_radius']
+        )
+
+        reasoning_details = []
+        for regulation in relevant_regulations:
+            # Placeholder for actual reasoning logic
+            reasoning_detail = f"Regulation {regulation['id']} applied with context {context.region} and industry {context.industry}."
+            reasoning_details.append(reasoning_detail)
+
+        reasoning_result = {
+            "primary_regulation_id": relevant_regulations[0]['id'] if relevant_regulations else "N/A",
+            "reasoning_details": reasoning_details
+        }
+
+        return reasoning_result
+
+    async def _generate_response(self, workflow_data: Dict) -> Dict:
+        """
+        Generate final response incorporating related regulations.
+        """
+        reasoning_result = workflow_data["intermediate_results"][AIState.EXPERT_REASONING.value]
+        related_regulations = self.space_mapper.get_related_regulations(reasoning_result['primary_regulation_id'])
+
+        # Generate final response incorporating related regulations
+        final_response = {
+            "reasoning_result": reasoning_result,
+            "related_regulations": related_regulations,
+            "response_details": "Final response details including related regulations."
+        }
+
+        return final_response
+
 class PersonaManager:
     def __init__(self, config: Dict):
         self.config = config
@@ -391,3 +484,29 @@ class ComplianceVerifier:
         except Exception as e:
             self.logger.error(f"Compliance verification failed: {str(e)}")
             raise
+            raise
+      
+
+
+# Example usage
+async def main():
+    config = aot_config()
+    aot = AlgorithmOfThought(config)
+    
+    context = QueryContext(
+        user_role="compliance_officer",
+        expertise_level=3,
+        industry="finance",
+        region="EU",
+        timestamp=datetime.now(),
+        request_priority="high",
+        coordinates=[51.5074, -0.1278]
+    )
+    
+    result = aot.process_query(
+        query="Analyze GDPR requirements for fintech",
+        context=context
+    )
+
+if __name__ == "__main__":
+    asyncio.run(main())

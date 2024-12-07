@@ -1,3 +1,35 @@
+"""
+Data Pipeline Module
+
+This module provides functionality for fetching, processing and mapping regulatory data
+from multiple sources into a unified 4D spatial representation.
+
+Components:
+- DataPipeline: Main class for data ingestion and processing
+- Integration with Federal Register API
+- Integration with Regulations.gov API 
+- Integration with internal clause and regulation databases
+
+Key Features:
+- Fetches regulatory documents from Federal Register and Regulations.gov
+- Retrieves regulatory clauses and regulations from internal databases
+- Maps regulatory data to 4D spatial coordinates using Nuremberg numbers
+- Processes and unifies data from multiple sources
+- Handles API authentication and error cases
+
+Example:
+    # Initialize pipeline
+    pipeline = DataPipeline(config)
+    
+    # Fetch and process data
+    processed_data = await pipeline.fetch_and_process_data()
+
+Dependencies:
+    - aiohttp for async HTTP requests
+    - SpaceMapper for 4D spatial mapping
+    - Configuration for API credentials
+"""
+
 from typing import Dict, List
 import asyncio
 import aiohttp

@@ -1,3 +1,39 @@
+"""
+Database Management System Module
+
+This module provides functionality for managing database maintenance, backups, disaster recovery,
+and schema migrations across PostgreSQL and Neo4j databases.
+
+Components:
+- DatabaseMaintenance: Handles routine maintenance tasks for PostgreSQL and Neo4j
+- BackupManager: Manages database backups to Azure Blob Storage
+- DisasterRecovery: Handles failover and recovery procedures
+- SchemaManager: Manages database schema migrations using Liquibase
+
+Key Features:
+- Automated maintenance tasks (VACUUM, reindexing, statistics updates)
+- Full and incremental backups with validation
+- Regional failover and disaster recovery drills
+- Schema version control and migrations
+- Integration with Azure services for storage and recovery
+
+Example:
+    # Initialize maintenance
+    maintenance = DatabaseMaintenance(config)
+    
+    # Perform PostgreSQL maintenance
+    results = await maintenance.perform_postgresql_maintenance()
+    
+    # Create backup
+    backup = await backup_manager.perform_backup("full", "postgresql")
+
+Dependencies:
+    - PostgreSQL and Neo4j database connections
+    - Azure Blob Storage for backups
+    - Azure Recovery Services for disaster recovery
+    - Liquibase for schema management
+"""
+
 from typing import Dict, List, Optional, Union
 import asyncio
 import subprocess

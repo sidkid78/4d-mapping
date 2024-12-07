@@ -5,16 +5,20 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "next start"
   },
   "dependencies": {
+    "@azure/arm-appservice": "^15.0.0",
+    "@azure/arm-containerservice": "^21.3.0",
+    "@azure/arm-monitor": "^7.0.0",
     "@azure/arm-recoveryservices": "^6.0.0",
+    "@azure/arm-resources": "^5.2.0",
     "@azure/identity": "^4.5.0",
     "@azure/keyvault-keys": "^4.9.0",
     "@azure/openai": "^1.0.0-beta.7",
     "@azure/search-documents": "^12.0.0",
     "@azure/storage-blob": "^12.26.0",
+    "@hookform/resolvers": "^3.9.1",
     "@prisma/client": "^5.22.0",
     "@radix-ui/react-avatar": "^1.1.1",
     "@radix-ui/react-dropdown-menu": "^2.1.2",
@@ -22,7 +26,7 @@
     "@radix-ui/react-scroll-area": "^1.2.1",
     "@radix-ui/react-select": "^2.1.2",
     "@radix-ui/react-slider": "^1.2.1",
-    "@radix-ui/react-slot": "^1.0.2",
+    "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.1",
     "@radix-ui/react-toast": "^1.2.2",
     "@react-three/drei": "^9.117.3",
@@ -46,6 +50,7 @@
     "plotly.js": "^2.35.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-hook-form": "^7.53.2",
     "react-plotly.js": "^2.6.0",
     "recharts": "^2.13.3",
     "tailwind-merge": "^2.0.0",
@@ -54,7 +59,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/node": "^20.9.0",
+    "@types/node": "^20.17.9",
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
     "@types/react-plotly.js": "^2.6.3",

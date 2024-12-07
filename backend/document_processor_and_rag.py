@@ -74,7 +74,12 @@ class DocumentMetadata:
 
 class DocumentProcessor:
     def __init__(self, config: Dict):
-        # Initialize Azure services and Neo4j connection
+        """
+        Initialize the DocumentProcessor with Azure services and Neo4j connection.
+        
+        Args:
+            config (Dict): Configuration dictionary containing service endpoints and credentials.
+        """
         self.form_recognizer = DocumentAnalysisClient(
             endpoint=config["form_recognizer_endpoint"],
             credential=AzureKeyCredential(config["form_recognizer_key"])
@@ -100,7 +105,13 @@ class DocumentProcessor:
     async def process_document(self, content: bytes, filename: str) -> Dict:
         """
         Process an incoming document through the complete pipeline.
-        This method could be called from our Regulation Manager when a new document is uploaded.
+        
+        Args:
+            content (bytes): The content of the document to be processed.
+            filename (str): The name of the document file.
+        
+        Returns:
+            Dict: A dictionary containing document ID, version, blob path, and metadata.
         """
         try:
             cleaned_content = await self._preprocess_document(content)
@@ -140,6 +151,12 @@ class DocumentProcessor:
 
 class RAGAgent:
     def __init__(self, config: Dict):
+        """
+        Initialize the RAGAgent with Azure services and Neo4j connection.
+        
+        Args:
+            config (Dict): Configuration dictionary containing service endpoints and credentials.
+        """
         self.search_client = SearchClient(
             endpoint=config["search_endpoint"],
             index_name="documents",
@@ -154,7 +171,13 @@ class RAGAgent:
     async def process_query(self, query: str, user_context: Dict) -> Dict:
         """
         Process a query through the RAG pipeline.
-        This method could be used in our Advanced Orchestrator to provide intelligent responses.
+        
+        Args:
+            query (str): The query string to be processed.
+            user_context (Dict): Contextual information about the user.
+        
+        Returns:
+            Dict: A dictionary containing the prompt, context, and retrieved documents.
         """
         try:
             sub_queries = await self._decompose_query(query)
@@ -176,7 +199,12 @@ class RAGAgent:
     async def _decompose_query(self, query: str) -> List[Dict]:
         """
         Decompose a query into sub-queries based on context and coordinates.
-        This uses the 4D coordinate system we developed earlier.
+        
+        Args:
+            query (str): The query string to be decomposed.
+        
+        Returns:
+            List[Dict]: A list of sub-queries.
         """
         sub_queries = []
         entities = await self._extract_query_entities(query)
@@ -195,7 +223,13 @@ class RAGAgent:
     async def _retrieve_documents(self, sub_queries: List[Dict], user_context: Dict) -> List[Dict]:
         """
         Retrieve documents using multiple retrieval strategies.
-        This combines coordinate-based and semantic search, leveraging our earlier work.
+        
+        Args:
+            sub_queries (List[Dict]): A list of sub-queries for document retrieval.
+            user_context (Dict): Contextual information about the user.
+        
+        Returns:
+            List[Dict]: A list of retrieved documents.
         """
         results = []
         coord_queries = [q for q in sub_queries if q["type"] == "coordinate"]
@@ -212,7 +246,13 @@ class RAGAgent:
     def _rank_documents(self, documents: List[Dict], user_context: Dict) -> List[Dict]:
         """
         Rank retrieved documents based on multiple factors.
-        This uses the expertise levels and trust scores we developed earlier.
+        
+        Args:
+            documents (List[Dict]): A list of retrieved documents.
+            user_context (Dict): Contextual information about the user.
+        
+        Returns:
+            List[Dict]: A list of ranked documents.
         """
         for doc in documents:
             score = 0.0
@@ -229,7 +269,12 @@ class RAGAgent:
     async def _synthesize_context(self, ranked_docs: List[Dict]) -> Dict:
         """
         Synthesize retrieved documents into a coherent context.
-        This could be used to provide comprehensive information in our Regulation Manager.
+        
+        Args:
+            ranked_docs (List[Dict]): A list of ranked documents.
+        
+        Returns:
+            Dict: A dictionary containing key points, relevant clauses, conflicts, and source documents.
         """
         key_points = []
         relevant_clauses = []
@@ -253,7 +298,14 @@ class RAGAgent:
     def _construct_prompt(self, query: str, context: Dict, user_context: Dict) -> str:
         """
         Construct an LLM prompt incorporating query and context.
-        This could be used to generate responses in our Advanced Orchestrator.
+        
+        Args:
+            query (str): The original query string.
+            context (Dict): The synthesized context from retrieved documents.
+            user_context (Dict): Contextual information about the user.
+        
+        Returns:
+            str: The constructed prompt string.
         """
         prompt_parts = [
             f"Query: {query}\n",
@@ -279,6 +331,16 @@ class RAGAgent:
 
 # Example of how to integrate this with our existing system
 async def integrate_with_advanced_orchestrator(query: str, user_context: Dict):
+    """
+    Integrate the RAGAgent with the Advanced Orchestrator.
+    
+    Args:
+        query (str): The query string to be processed.
+        user_context (Dict): Contextual information about the user.
+    
+    Returns:
+        Dict: The result from the RAGAgent processing.
+    """
     config = {
         # Add configuration details here
     }
@@ -291,6 +353,16 @@ async def integrate_with_advanced_orchestrator(query: str, user_context: Dict):
     return result
 
 async def integrate_with_regulation_manager(document_content: bytes, filename: str):
+    """
+    Integrate the DocumentProcessor with the Regulation Manager.
+    
+    Args:
+        document_content (bytes): The content of the document to be processed.
+        filename (str): The name of the document file.
+    
+    Returns:
+        Dict: The result from the DocumentProcessor processing.
+    """
     config = {
         # Add configuration details here
     }

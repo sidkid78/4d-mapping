@@ -52,9 +52,9 @@ import seaborn as sns
 import traceback
 import sys
 from space_mapper import SpaceMapper
-from query_engine import QueryEngine
+from backend.rag.query_engine import QueryEngine
 from ai_compliance_system import ComplianceSystem
-from .model_types import Coordinates4D, SearchDocument
+from backend.model.model_types import Coordinates4D, SearchDocument
 
 # Configure logging with more detailed format
 logging.basicConfig(

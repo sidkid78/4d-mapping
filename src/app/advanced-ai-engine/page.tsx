@@ -33,12 +33,20 @@ interface AIResponse {
   confidenceScore: number;
 }
 
+/**
+ * AdvancedAIEnginePage component renders the main interface for interacting with the Advanced AI Engine.
+ * It includes a form for submitting queries and displays the AI's response, including analysis, visualizations, and explanation tree.
+ */
 export default function AdvancedAIEnginePage() {
   const [query, setQuery] = useState('')
   const [expertiseLevel, setExpertiseLevel] = useState('intermediate')
   const [loading, setLoading] = useState(false)
   const [response, setResponse] = useState<AIResponse | null>(null)
 
+  /**
+   * Handles form submission to query the AI engine.
+   * @param e - The form event.
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -141,7 +149,10 @@ export default function AdvancedAIEnginePage() {
   )
 }
 
-// Update the ExplanationTree component
+/**
+ * ExplanationTree component recursively renders the explanation tree provided by the AI engine.
+ * @param node - The current node in the explanation tree.
+ */
 function ExplanationTree({ node }: { node: ExplanationNode }) {
   if (!node) return null;
 

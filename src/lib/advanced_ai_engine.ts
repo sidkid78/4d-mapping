@@ -66,6 +66,12 @@ interface Visualization {
 }
 
 function generateVisualization(data: any, type: Visualization['type']): Visualization {
+  const nodes = data?.nodes || [];
+  const edges = data?.edges || [];
+  const matrix = data?.matrix || [];
+  const categories = data?.categories || [];
+  const requirements = data?.requirements || [];
+
   switch (type) {
     case 'network':
       return {
@@ -74,15 +80,15 @@ function generateVisualization(data: any, type: Visualization['type']): Visualiz
         data: [
           {
             type: 'network',
-            nodes: data.nodes.map((n: any) => ({
-              id: n.id,
-              label: n.title,
-              group: n.category
+            nodes: nodes.map((n: any) => ({
+              id: n.id || 'unknown',
+              label: n.title || 'Untitled',
+              group: n.category || 'default'
             })),
-            edges: data.edges.map((e: any) => ({
-              from: e.source,
-              to: e.target,
-              value: e.weight
+            edges: edges.map((e: any) => ({
+              from: e.source || '',
+              to: e.target || '',
+              value: e.weight || 1
             }))
           }
         ],
@@ -99,9 +105,9 @@ function generateVisualization(data: any, type: Visualization['type']): Visualiz
         title: 'Compliance Coverage Matrix',
         data: [{
           type: 'heatmap',
-          z: data.matrix,
-          x: data.categories,
-          y: data.requirements,
+          z: matrix,
+          x: categories,
+          y: requirements,
           colorscale: 'Viridis'
         }],
         layout: {

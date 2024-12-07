@@ -1,3 +1,45 @@
+"""
+Framework for implementing security, privacy, ethics and federated learning in AI systems.
+
+This module provides comprehensive security, privacy and ethical controls for AI systems.
+
+Components:
+- SecurityContext: Stores user security context including roles, permissions and session info
+- SecurityFramework: Handles authentication, authorization and access control
+- PrivacyFramework: Implements differential privacy and data protection mechanisms
+- FederatedLearningManager: Manages distributed model training across clients
+- EthicalAI: Evaluates AI decisions for bias, fairness and ethical compliance
+
+Key Features:
+- Azure AD integration for authentication
+- Role and attribute based access control
+- Differential privacy with configurable noise mechanisms 
+- Federated learning with TensorFlow Federated
+- Bias detection and fairness evaluation
+- Explainable AI with decision paths and counterfactuals
+
+Example:
+    # Initialize frameworks
+    security = SecurityFramework(config)
+    privacy = PrivacyFramework(config)
+    ethics = EthicalAI(config)
+
+    # Authenticate and authorize
+    context = await security.authenticate_user(credentials)
+    if await security.authorize_access(context, "model", "predict"):
+        
+        # Make prediction with privacy protection
+        prediction = await model.predict(data)
+        protected = await privacy.apply_differential_privacy(
+            prediction, 
+            domain="finance",
+            sensitivity=0.1
+        )
+        
+        # Evaluate ethics
+        assessment = await ethics.evaluate_ethics(protected, context)
+"""
+
 from typing import Dict, List, Optional, Union
 from dataclasses import dataclass
 import logging
@@ -7,12 +49,11 @@ from cryptography.fernet import Fernet
 import jwt
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.keys import KeyClient
-from azure.security.keyvault.keys.crypto import CryptographyClient
+from azure.keyvault.keys.crypto import CryptographyClient
 import tensorflow_federated as tff
 import tensorflow_privacy
 from mp_spdz.runtime import Runtime
 import tensorflow as tf
-
 @dataclass
 class SecurityContext:
     user_id: str

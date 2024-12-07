@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { DatabaseManager } from '@/lib/database-manager'
+import { getDatabaseManager, DatabaseConfig } from '@/lib/database-manager'
 import { validateRequest } from '@/lib/api_utils'
 
 interface CrosswalkRequest {
@@ -8,15 +8,17 @@ interface CrosswalkRequest {
   crosswalkType: string
 }
 
-const dbManager = new DatabaseManager({
+const config: DatabaseConfig = {
   host: process.env.BACKEND_URL || 'http://localhost:8000',
   port: 5432,
   database: process.env.DATABASE_NAME || 'procurity',
   user: process.env.API_KEY!,
-  password: process.env.DATABASE_PASSWORD!
-}, 
-process.env.API_KEY!,
-'v1')
+  password: process.env.DATABASE_PASSWORD!,
+  apiKey: process.env.API_KEY!,
+  version: 'v1'
+}
+
+const dbManager = getDatabaseManager()
 
 export async function POST(request: NextRequest) {
   try {

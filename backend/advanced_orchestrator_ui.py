@@ -3,7 +3,17 @@ from openai import AzureOpenAI
 import os
 
 class AdvancedOrchestrator:
+    """Advanced orchestrator for handling RAG-enhanced LLM responses.
+    
+    This class manages the integration with Azure OpenAI to generate responses
+    based on retrieved context from RAG results.
+    
+    Attributes:
+        ai_client: AzureOpenAI client instance for making API calls
+    """
+
     def __init__(self):
+        """Initialize the orchestrator with Azure OpenAI client."""
         self.ai_client = AzureOpenAI(
             api_key=os.getenv("AZURE_OPENAI_API_KEY"),
             api_version="2024-08-01-preview",
@@ -11,8 +21,27 @@ class AdvancedOrchestrator:
         )
 
     async def generate_response(self, rag_result: Dict) -> Dict:
-        """
-        Generate a response using the RAG results through Azure OpenAI.
+        """Generate an enhanced response using RAG results through Azure OpenAI.
+        
+        Takes RAG results containing query, prompt and retrieved documents to generate
+        a contextually informed response using Azure OpenAI's chat completions API.
+        
+        Args:
+            rag_result: Dictionary containing:
+                - query: Original user query
+                - prompt: Enhanced prompt with context
+                - context: Retrieved context information
+                - retrieved_docs: List of retrieved documents
+                
+        Returns:
+            Dictionary containing:
+                - query: Original query
+                - response: Generated response text
+                - context: Context used for generation
+                - sources: List of source document titles
+                
+        Raises:
+            Exception: If LLM response generation fails
         """
         try:
             response = await self.ai_client.chat.completions.create(
@@ -37,5 +66,3 @@ class AdvancedOrchestrator:
         
         except Exception as e:
             raise Exception(f"Failed to generate LLM response: {str(e)}")
-        
-    
